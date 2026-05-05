@@ -16,5 +16,5 @@ dependencies = [
 ]
 
 [project.scripts]
-pyopenms-idfreeqc = "pyopenms_idfreeqc.calculate_metrics:cli"
+pyopenms-idfreeqc = "pyopenms_idfreeqc.calculate_metrics:main"
 
