@@ -2749,8 +2749,9 @@ def calculate_metrics(
     plot_output: str = "idfree_qc_plot.png",
     show_tables: bool = False,
     show_json: bool = False,
-    cmap_name: str = "RdBu_r"
-) -> str:
+    cmap_name: str = "RdBu_r",
+    continue_on_error: bool = False
+) -> bool:
     """
     Calculate QC metrics for one or more mzML files and generate mzQC output.
     
@@ -2764,13 +2765,15 @@ def calculate_metrics(
         plot_output: Path to save the plot (default: "idfree_qc_plot.png")
         show_tables: Whether to print formatted metric tables (default: True)
         show_json: Whether to print the full JSON output (default: False)
+        cmap_name: Colormap name for heatmap (default: "RdBu_r")
+        continue_on_error: Continue processing other files if one fails (default: False)
     
     Returns:
-        str: The mzQC JSON string
+        bool: True if any errors occurred during processing, False otherwise
         
     Example:
         >>> from pyopenms_idfreeqc.calculate_metrics import calculate_metrics
-        >>> json_output = calculate_metrics(
+        >>> error_occurred = calculate_metrics(
         ...     mzml_files=["sample1.mzML", "sample2.mzML"],
         ...     output_file="my_qc.json"
         ... )
@@ -2782,31 +2785,55 @@ def calculate_metrics(
     
     print("Processing mzML files and computing QC metrics...")
     all_run_data = []
+    error_occurred = False
 
     for filename in mzml_files:
         print(f"\nProcessing {filename}...")
+        
+        try:
+            # Load mzML
+            fh = oms.MzMLFile()
+            exp = oms.MSExperiment()
+            fh.load(filename, exp)
+            exp.updateRanges()
 
-        # Load mzML
-        fh = oms.MzMLFile()
-        exp = oms.MSExperiment()
-        fh.load(filename, exp)
-        exp.updateRanges()
+            # Compute metrics
+            metrics = compute_qc_metrics(exp)
+            instrument_meta = extract_instrument_metadata(exp)
 
-        # Compute metrics
-        metrics = compute_qc_metrics(exp)
-        instrument_meta = extract_instrument_metadata(exp)
+            # Store run data
+            all_run_data.append({
+                'filename': filename,
+                'metrics': metrics,
+                'instrument_metadata': instrument_meta
+            })
 
-        # Store run data
-        all_run_data.append({
-            'filename': filename,
-            'metrics': metrics,
-            'instrument_metadata': instrument_meta
-        })
+            print(f"  ✓ Computed {len(metrics)} QC metrics for {filename}")
+            
+        except Exception as e:
+            error_occurred = True
+            print(f"  ✗ Error processing {filename}: {e}")
+            
+            if not continue_on_error:
+                print("Tip: Use --continue-on-error to continue processing despite errors")
+                raise
+            else:
+                print(f"  → Skipping {filename} and continuing with remaining files")
+                continue
 
-        print(f"  ✓ Computed {len(metrics)} QC metrics for {filename}")
-
+    # Check if we have any successful files to process
+    if not all_run_data:
+        if error_occurred:
+            print("\n✗ No files were successfully processed due to errors.")
+            if continue_on_error:
+                return True  # Return error status
+            else:
+                raise RuntimeError("No files were successfully processed")
+        else:
+            raise ValueError("No mzML files provided for processing")
+    
     # Build mzQC JSON with all runs
-    print("\nBuilding mzQC JSON file...")
+    print(f"\nBuilding mzQC JSON file from {len(all_run_data)} successfully processed files...")
     json_str = build_mzqc(all_run_data)
 
     if show_json:
@@ -2958,7 +2985,7 @@ def calculate_metrics(
         plt.close()
         print(f"✓ Heatmap saved to: {plot_output}")
 
-    return json_str
+    return error_occurred
 
 
 # -------------------------------------------------------------------------
@@ -3044,7 +3071,12 @@ Examples:
     default='RdBu_r',
     help='Colormap name for heatmap (e.g., RdBu_r, viridis)'
 )
-def main(files, demo, output, plot, no_plot, show_tables, show_json, download_demo, cmap):
+@click.option(
+    '--continue-on-error',
+    is_flag=True,
+    help='Continue processing files even if an error occurs (still exits with error code)'
+)
+def main(files, demo, output, plot, no_plot, show_tables, show_json, download_demo, cmap, continue_on_error):
     mzml_files = []
     
     if demo:
@@ -3087,15 +3119,22 @@ def main(files, demo, output, plot, no_plot, show_tables, show_json, download_de
     
     # Call the core function
     try:
-        calculate_metrics(
+        error_occurred = calculate_metrics(
             mzml_files=mzml_files,
             output_file=output,
             generate_plot=not no_plot,
             plot_output=plot,
             show_tables=show_tables,
             show_json=show_json,
-            cmap_name=cmap
+            cmap_name=cmap,
+            continue_on_error=continue_on_error
         )
+        
+        # Exit with error code if any errors occurred during processing
+        if error_occurred:
+            import sys
+            sys.exit(1)
+            
     except Exception as e:
         click.echo(f"Error during processing: {e}", err=True)
         raise

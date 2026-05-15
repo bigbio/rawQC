@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pyopenms-idfreeqc"
-version = "0.1.0"
+version = "0.1.1"
 description = "ID-free QC metrics demo refactored into a reusable package"
 readme = "README.MD"
 requires-python = ">=3.9"
@@ -16,5 +16,5 @@ dependencies = [
 ]
 
 [project.scripts]
-pyopenms-idfreeqc = "pyopenms_idfreeqc.calculate_metrics:cli"
+pyopenms-idfreeqc = "pyopenms_idfreeqc.calculate_metrics:main"
 

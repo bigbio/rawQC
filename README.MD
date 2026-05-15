@@ -79,6 +79,8 @@ pyopenms-idfreeqc --demo
 - `--no-plot`: Skip generating the heatmap visualization
 - `--show-tables`: Print formatted metric tables to console
 - `--show-json`: Print the full mzQC JSON output to console
+- `--continue-on-error`:  Continue processing files even if an error occurs (still exits with error code)
+
 
 #### Examples
 
