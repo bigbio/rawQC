@@ -22,9 +22,14 @@ This tool computes comprehensive quality control metrics from mzML files without
 # Install uv if you don't have it
 curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Create a virtual environment and install the package
+# Create a virtual environment
 uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+
+# Optional: install the latest pyOpenMS package, to enable latest features:
+uv pip install --upgrade pyopenms --index-url https://pypi.cs.uni-tuebingen.de/simple/Looking in indexes: https://pypi.cs.uni-tuebingen.de/simple/
+
+# Install the package
 uv pip install -e .
 ```
 

@@ -680,16 +680,7 @@ def _polarity_to_str(pol: Any) -> str:
     Returns:
         str: "positive", "negative", or "unknown"
     """
-    try:
-        if pol == oms.InstrumentSettings.POLNULL:
-            return "unknown"
-        elif pol == oms.InstrumentSettings.POSITIVE:
-            return "positive"
-        elif pol == oms.InstrumentSettings.NEGATIVE:
-            return "negative"
-    except Exception:
-        pass
-    return "unknown"
+    return oms.IonSource().polarityToString(pol)
 
 def _extract_spectrum_polarity(spec: oms.MSSpectrum) -> str:
     """
@@ -1884,30 +1875,13 @@ def peak_type_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
 
         # Get annotated peak type from metadata (once per level)
         if level not in level_annotated:
-            try:
-                spec_type = spec.getType()
-                # Map SpectrumSettings.SpectrumType enum to string
-                if spec_type == oms.SpectrumSettings.CENTROID:
-                    level_annotated[level] = "centroid"
-                elif spec_type == oms.SpectrumSettings.PROFILE:
-                    level_annotated[level] = "profile"
-                else:
-                    level_annotated[level] = "unknown"
-            except Exception:
-                level_annotated[level] = "unknown"
+            # Map SpectrumSettings.SpectrumType enum to string
+            level_annotated[level] = oms.SpectrumSettings().spectrumTypeToString(spec.getType())
 
         # Estimate peak type from data (once per level, need enough peaks)
         if level not in level_estimated and spec.size() > 10:
-            try:
-                estimated = oms.PeakTypeEstimator.estimateType(spec)
-                if estimated == oms.SpectrumSettings.CENTROID:
-                    level_estimated[level] = "centroid"
-                elif estimated == oms.SpectrumSettings.PROFILE:
-                    level_estimated[level] = "profile"
-                else:
-                    level_estimated[level] = "unknown"
-            except Exception:
-                level_estimated[level] = "unknown"
+            estimated = oms.PeakTypeEstimator().estimateType(spec)
+            level_estimated[level] = oms.SpectrumSettings().spectrumTypeToString(estimated)
 
     result = {}
     for level in sorted(set(list(level_annotated.keys()) + list(level_estimated.keys()))):
@@ -1936,11 +1910,7 @@ def activation_method_statistics(exp: oms.MSExperiment) -> Dict[str, int]:
         level = int(spec.getMSLevel())
         for pc in spec.getPrecursors():
             for am in pc.getActivationMethods():
-                # Get short name for activation method
-                try:
-                    am_name = oms.Precursor.NamesOfActivationMethodShort[am]
-                except:
-                    am_name = str(am)
+                am_name = oms.Precursor().activationMethodToShortString(am)
 
                 key = f"MS{level}_ActivationMethod_{am_name}"
                 act_method_counts[key] += 1
@@ -1967,17 +1937,14 @@ def mass_analyzer_info(exp: oms.MSExperiment) -> Dict[str, Any]:
 
         if analyzers:
             for idx, ma in enumerate(analyzers):
-                try:
-                    # Get analyzer type
-                    ma_type = oms.MassAnalyzer.NamesOfAnalyzerType[ma.getType()]
-                    result[f"MassAnalyzer_{idx}_Type"] = ma_type
+                # Get analyzer type
+                ma_type = oms.MassAnalyzer().analyzerTypeToString(ma.getType())
+                result[f"MassAnalyzer_{idx}_Type"] = ma_type
 
-                    # Get resolution if available
-                    resolution = ma.getResolution()
-                    if resolution > 0:
-                        result[f"MassAnalyzer_{idx}_Resolution"] = float(resolution)
-                except Exception:
-                    pass
+                # Get resolution if available
+                resolution = ma.getResolution()
+                if resolution > 0:
+                    result[f"MassAnalyzer_{idx}_Resolution"] = float(resolution)
     except Exception:
         pass
 
@@ -2035,15 +2002,12 @@ def faims_compensation_voltages(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
     result = {}
 
-    try:
-        cvs = oms.FAIMSHelper.getCompensationVoltages(exp)
-        if cvs:
-            result["FAIMS_CV_Count"] = len(cvs)
-            result["FAIMS_CV_Values"] = [float(cv) for cv in cvs]
-            result["FAIMS_CV_Min"] = float(min(cvs))
-            result["FAIMS_CV_Max"] = float(max(cvs))
-    except Exception:
-        pass
+    cvs = oms.FAIMSHelper().getCompensationVoltages(exp)
+    if cvs:
+        result["FAIMS_CV_Count"] = len(cvs)
+        result["FAIMS_CV_Values"] = [float(cv) for cv in cvs]
+        result["FAIMS_CV_Min"] = float(min(cvs))
+        result["FAIMS_CV_Max"] = float(max(cvs))
 
     return result
 
@@ -2072,8 +2036,7 @@ def chromatogram_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
     chrom_total = len(chroms)
 
     chrom_type_counts = Counter()
-    chrom_rts_all = []
-
+    
     # Map common chromatogram PSI-MS accessions to readable names
     PSI_CHROM_TYPES = {
         "MS:1000235": "tic",                      # total ion current chromatogram
@@ -2084,37 +2047,25 @@ def chromatogram_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "MS:1001474": "mrm",                      # MRM chromatogram
         "MS:1002007": "xic",                      # extracted ion chromatogram
     }
-
+    
+    # fallback when no chromatogram type is set or recognized
+    chrom_rt_min = np.nan
+    chrom_rt_max = np.nan
+        
     for ch in chroms:
-        # Try to extract chromatogram type from CV terms
-        cname = "unknown"
-        try:
-            cvs = ch.getChromatogramSettings().getCVTerms()
-            for acc, name in PSI_CHROM_TYPES.items():
-                if acc in cvs:
-                    cname = name
-                    break
-        except Exception:
-            pass
+        ch: oms.MSChromatogram
+        # Determine chromatogram type from metadata
+        ChromatogramNames = ["mass chromatogram", "total ion current chromatogram", "selected ion current chromatogram" ,"base peak chromatogram",
+                                                                  "selected ion monitoring chromatogram" ,"selected reaction monitoring chromatogram" ,"electromagnetic radiation chromatogram",
+                                                                  "absorption chromatogram", "emission chromatogram", "unknown chromatogram"]
+        cname = ChromatogramNames[ch.getChromatogramType()] if ch.getChromatogramType() < len(ChromatogramNames) else "unknown"
 
         chrom_type_counts[cname] += 1
 
         # RT coverage
-        try:
-            rtarr = ch.getRTArray()
-            if rtarr is not None and rtarr.size() > 0:
-                rts = [float(rtarr[i]) for i in range(rtarr.size())]
-                chrom_rts_all.extend(rts)
-        except Exception:
-            pass
-
-    # Calculate RT range
-    if chrom_rts_all:
-        chrom_rt_min = float(min(chrom_rts_all))
-        chrom_rt_max = float(max(chrom_rts_all))
-    else:
-        chrom_rt_min = np.nan
-        chrom_rt_max = np.nan
+        ch.updateRanges()  # Ensure RT range is updated
+        chrom_rt_min = np.nanmin([chrom_rt_min, ch.getMinRT()])
+        chrom_rt_max = np.nanmax([chrom_rt_max, ch.getMaxRT()])
 
     return {
         "total_chromatograms": chrom_total,
@@ -2563,7 +2514,7 @@ def parse_mzqc_metrics(json_str: str) -> Tuple[List[str], Dict[str, Dict[str, An
     """
     try:
         data = json.loads(json_str)
-        run_qualities = data['runQualities']
+        run_qualities = data['mzQC']['runQualities']
 
         run_labels = []
         qc_metrics_dict: Dict[str, Dict[str, Any]] = {}
