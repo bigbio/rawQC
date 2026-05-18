@@ -60,7 +60,7 @@ pyopenms-idfreeqc sample1.mzML sample2.mzML
 pyopenms-idfreeqc data/*.mzML
 
 # Specify custom output paths
-pyopenms-idfreeqc sample.mzML -o my_results.mzQC.json -p my_plot.png
+pyopenms-idfreeqc sample.mzML -o my_results.mzQC -p my_plot.png
 ```
 
 #### Demo Mode
@@ -79,7 +79,7 @@ pyopenms-idfreeqc --demo
 
 - `--demo`: Use built-in demo mzML files
 - `--download-demo`: Download demo files before processing
-- `-o, --output PATH`: Output path for mzQC JSON; a TSV metrics table will also be saved next to it (default: `multi_run_qc.mzQC.json`)
+- `-o, --output PATH`: Output path for mzQC JSON; a TSV metrics table will also be saved next to it (default: `multi_run_qc.mzQC`)
 - `-p, --plot PATH`: Output plot file path (default: `idfree_qc_plot.png`)
 - `--no-plot`: Skip generating the heatmap visualization
 - `--show-tables`: Print formatted metric tables to console
