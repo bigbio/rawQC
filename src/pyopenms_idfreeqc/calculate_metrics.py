@@ -2624,11 +2624,14 @@ Analyzing {len(run_labels)} run(s): {', '.join(run_labels)}\
 def derive_tsv_output_path(output_json_path: str) -> str:
     """
     Derive a TSV output path from the mzQC JSON output path.
+    If the path ends with '.mzQC' (case-insensitive), replace it by '.tsv'.
     If the path ends with '.mzQC.json' (case-insensitive), replace it by '.tsv'.
     Otherwise, replace a generic '.json' extension by '.tsv' or append '.tsv'.
     """
     base = output_json_path
     lower = base.lower()
+    if lower.endswith('.mzqc'):
+        return base[: -len('.mzqc')] + '.tsv'
     if lower.endswith('.mzqc.json'):
         return base[: -len('.mzQC.json')] + '.tsv'
     if lower.endswith('.json'):
@@ -2694,7 +2697,7 @@ def write_metrics_tsv(json_str: str, tsv_path: str) -> None:
 # -------------------------------------------------------------------------
 def calculate_metrics(
     mzml_files: List[str],
-    output_file: Optional[str] = "multi_run_qc.mzQC.json",
+    output_file: Optional[str] = "multi_run_qc.mzQC",
     generate_plot: bool = True,
     plot_output: str = "idfree_qc_plot.png",
     show_tables: bool = False,
@@ -2709,7 +2712,7 @@ def calculate_metrics(
     
     Args:
         mzml_files: List of paths to mzML files to process
-        output_file: Path to save the mzQC JSON output (default: "multi_run_qc.mzQC.json").
+        output_file: Path to save the mzQC JSON output (default: "multi_run_qc.mzQC").
                      Set to None to skip saving to file.
         generate_plot: Whether to generate a heatmap visualization (default: True)
         plot_output: Path to save the plot (default: "idfree_qc_plot.png")
@@ -2984,9 +2987,9 @@ Examples:
 @click.option(
     '--output',
     '-o',
-    default='multi_run_qc.mzQC.json',
+    default='multi_run_qc.mzQC',
     type=click.Path(),
-    help='Output path for mzQC JSON; a TSV metrics table will also be saved next to it (default: multi_run_qc.mzQC.json)'
+    help='Output path for mzQC JSON; a TSV metrics table will also be saved next to it (default: multi_run_qc.mzQC)'
 )
 @click.option(
     '--plot',
