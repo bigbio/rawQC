@@ -2052,12 +2052,11 @@ def chromatogram_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
     chrom_rt_min = np.nan
     chrom_rt_max = np.nan
         
+    ChromatogramNames = ["mass chromatogram", "total ion current chromatogram", "selected ion current chromatogram" ,"base peak chromatogram",
+                                                                "selected ion monitoring chromatogram" ,"selected reaction monitoring chromatogram" ,"electromagnetic radiation chromatogram",
+                                                                "absorption chromatogram", "emission chromatogram", "unknown chromatogram"]
     for ch in chroms:
-        ch: oms.MSChromatogram
         # Determine chromatogram type from metadata
-        ChromatogramNames = ["mass chromatogram", "total ion current chromatogram", "selected ion current chromatogram" ,"base peak chromatogram",
-                                                                  "selected ion monitoring chromatogram" ,"selected reaction monitoring chromatogram" ,"electromagnetic radiation chromatogram",
-                                                                  "absorption chromatogram", "emission chromatogram", "unknown chromatogram"]
         cname = ChromatogramNames[ch.getChromatogramType()] if ch.getChromatogramType() < len(ChromatogramNames) else "unknown"
 
         chrom_type_counts[cname] += 1
