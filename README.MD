@@ -1,4 +1,4 @@
-# pyopenms-idfreeqc
+# rawQC
 
 ID-free QC metrics calculation for mass spectrometry mzML files using pyOpenMS.
 
@@ -48,19 +48,19 @@ pip install -e .
 
 ### Command Line Interface
 
-After installation, the tool is available as `pyopenms-idfreeqc`:
+After installation, the tool is available as `rawQC`:
 
 #### Basic Usage
 
 ```bash
 # Process one or more mzML files
-pyopenms-idfreeqc sample1.mzML sample2.mzML
+rawQC sample1.mzML sample2.mzML
 
 # Process files using wildcards
-pyopenms-idfreeqc data/*.mzML
+rawQC data/*.mzML
 
 # Specify custom output paths
-pyopenms-idfreeqc sample.mzML -o my_results.mzQC -p my_plot.png
+rawQC sample.mzML -o my_results.mzQC -p my_plot.png
 ```
 
 #### Demo Mode
@@ -69,10 +69,10 @@ Use built-in example data to test the tool:
 
 ```bash
 # Download and process demo files
-pyopenms-idfreeqc --demo --download-demo
+rawQC --demo --download-demo
 
 # Use demo files (if already downloaded)
-pyopenms-idfreeqc --demo
+rawQC --demo
 ```
 
 #### Options
@@ -91,16 +91,16 @@ pyopenms-idfreeqc --demo
 
 ```bash
 # Process specific files with custom output
-pyopenms-idfreeqc file1.mzML file2.mzML -o qc_metrics.json -p qc_heatmap.png
+rawQC file1.mzML file2.mzML -o qc_metrics.json -p qc_heatmap.png
 
 # Process demo files without plot
-pyopenms-idfreeqc --demo --no-plot
+rawQC --demo --no-plot
 
 # Show JSON output to console
-pyopenms-idfreeqc sample.mzML --show-json
+rawQC sample.mzML --show-json
 
 # Process files and show tables
-pyopenms-idfreeqc *.mzML --show-tables
+rawQC *.mzML --show-tables
 ```
 
 ### As a Python Library
@@ -108,7 +108,7 @@ pyopenms-idfreeqc *.mzML --show-tables
 You can also use the tool programmatically in your Python scripts:
 
 ```python
-from pyopenms_idfreeqc.calculate_metrics import calculate_metrics
+from rawQC.calculate_metrics import calculate_metrics
 
 # Process mzML files
 json_output = calculate_metrics(
@@ -198,7 +198,7 @@ See the source code for complete metric descriptions and PSI-MS accessions.
 ```bash
 # Clone the repository
 git clone <repository-url>
-cd pyopenms-idfreeqc
+cd rawQC
 
 # Install with uv in development mode
 uv venv
@@ -206,7 +206,7 @@ source .venv/bin/activate
 uv pip install -e .
 
 # Run tests
-pyopenms-idfreeqc --demo --download-demo
+rawQC --demo --download-demo
 ```
 
 ## License
