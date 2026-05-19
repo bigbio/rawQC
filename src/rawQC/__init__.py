@@ -1,5 +1,5 @@
 """
-PyOpenMS ID-Free QC - Identification-Free Quality Control Metrics for Mass Spectrometry
+rawQC - Identification-Free Quality Control Metrics for Mass Spectrometry
 
 This package provides comprehensive quality control metrics for mass spectrometry
 data without requiring peptide/protein identification. It processes mzML files and
@@ -10,11 +10,11 @@ Main Components:
     - main: CLI entry point for command-line usage
     
 Example Usage:
-    >>> from pyopenms_idfreeqc import calculate_metrics
+    >>> from rawQC import calculate_metrics
     >>> json_output = calculate_metrics(["sample1.mzML", "sample2.mzML"])
     
     Or via command line:
-    $ python -m pyopenms_idfreeqc --demo --download-demo
+    $ python -m rawQC --demo --download-demo
 """
 
 __version__ = "0.1.0"
