@@ -1,6 +1,6 @@
 # rawQC
 
-ID-free QC metrics calculation for mass spectrometry mzML files using pyOpenMS.
+QC metrics calculation from raw mass spectrometry mzML files using pyOpenMS.
 
 This tool computes comprehensive quality control metrics from mzML files without requiring protein identification results. It outputs results in standard mzQC format with optional visualizations.
 
