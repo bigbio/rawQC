@@ -79,7 +79,7 @@ def test_faims_fixture_actually_exercises_faims():
     # metric must actually be emitted, not silently absent).
     metrics = compute_qc_metrics(CORPUS["faims_run"]())
     assert metrics.get("FAIMS_CV_Count", 0) >= 1
-    assert "FAIMS_CV_Range" in metrics
+    assert metrics.get("FAIMS_CV_Values")  # the voltages are actually collected
 
 
 def test_reference_manifest_is_explicit():
