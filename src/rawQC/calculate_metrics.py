@@ -1421,13 +1421,17 @@ def area_under_tic(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     specs = _filter_by_mslevel(exp, ms_level)
     if not specs:
         return np.nan
-    specs = sorted(specs, key=lambda s: s.getRT())
     rts = _rts(specs)
     tic = _ion_counts(specs)
+    # Drop non-finite pairs BEFORE ordering: sorting spectra by a NaN retention
+    # time is unreliable (NaN comparisons are false), which would leave the
+    # arrays unsorted and yield a negative "area" from the trapezoidal rule.
     finite = np.isfinite(rts) & np.isfinite(tic)
     rts, tic = rts[finite], tic[finite]
     if rts.size < 2:
         return np.nan
+    order = np.argsort(rts)
+    rts, tic = rts[order], tic[order]
     return _trapz(tic, rts)
 
 def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> List[float]:
@@ -1472,13 +1476,15 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     """
     specs = _filter_by_mslevel(exp, ms_level)
     if len(specs) == 0: return [np.nan]*4
-    specs = sorted(specs, key=lambda s: s.getRT())
     rts = _rts(specs)
     tic = _ion_counts(specs)
+    # Drop non-finite pairs before ordering (see area_under_tic).
     finite = np.isfinite(rts) & np.isfinite(tic)
     rts, tic = rts[finite], tic[finite]
     if rts.size < 2:
         return [np.nan] * 4
+    order = np.argsort(rts)
+    rts, tic = rts[order], tic[order]
     qs = np.quantile(rts, [0.0, 0.25, 0.50, 0.75, 1.0])
     # Integrate the TIC over retention time (issue #30, area-under-curve), then
     # split the integral at the quartile RT boundaries. Using the CUMULATIVE

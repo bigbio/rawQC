@@ -48,6 +48,16 @@ def test_single_scan_is_nan():
     assert math.isnan(area_under_tic(exp, 1))
 
 
+def test_nan_rt_does_not_flip_sign():
+    # A stray non-finite RT must be dropped before ordering; otherwise the
+    # remaining scans stay unsorted and the trapezoid integral goes negative.
+    exp = _ms1_run([(2, 2), (float("nan"), 0), (1, 1)])
+    assert area_under_tic(exp, 1) == 1.5  # trapz over RT 1..2 of TIC 1..2
+    areas = area_under_tic_rt_quantiles(exp, 1)
+    assert all(a >= 0 for a in areas)
+    assert abs(sum(areas) - 1.5) < 1e-9
+
+
 def test_rt_quantile_areas_conserve_and_dont_collapse():
     # 8 evenly spaced scans, constant TIC 10. Whole-run trapezoidal integral is
     # 10 * (rt span 7) = 70. The four quartile integrals must sum to 70 and NONE
