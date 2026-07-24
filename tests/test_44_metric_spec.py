@@ -23,8 +23,13 @@ def _rich_exp():
     for i in range(6):
         m1 = oms.MSSpectrum(); m1.setRT(float(i)); m1.setMSLevel(1)
         m1.set_peaks((np.arange(100.0, 115.0), np.full(15, 5.0)))
-        m1.setDriftTime(-45.0 if i % 2 == 0 else -55.0)  # FAIMS CV storage (see #23)
+        # Store the FAIMS CV both ways so the fixture exercises FAIMS whether or
+        # not this branch already carries the corrected reader (issue #23): the
+        # real drift-time storage AND the legacy FAIMS_CV metavalue.
+        cv = -45.0 if i % 2 == 0 else -55.0
+        m1.setDriftTime(cv)
         m1.setDriftTimeUnit(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
+        m1.setMetaValue("FAIMS_CV", cv)
         exp.addSpectrum(m1)
         m2 = oms.MSSpectrum(); m2.setRT(i + 0.3); m2.setMSLevel(2)
         m2.set_peaks((np.array([100.0]), np.array([5.0])))
@@ -61,6 +66,8 @@ def test_order_is_subset_of_metadata_and_unique():
 
 def test_registry_validation_has_no_violations():
     computed = compute_qc_metrics(_rich_exp())
+    # The rich fixture must genuinely exercise the FAIMS path.
+    assert "FAIMS_CV_Count" in computed and computed["FAIMS_CV_Count"] == 2
     problems = validate_metric_registry(computed)
     assert problems["uncovered"] == [], f"computed metrics without metadata: {problems['uncovered']}"
     assert problems["ordered_missing_metadata"] == []
