@@ -3086,6 +3086,61 @@ def write_metrics_tsv(json_str: str, tsv_path: str) -> None:
         df.to_csv(fh, sep="\t", index=False)
 
 
+def _flatten_metric_for_heatmap(name: str, value: Any) -> List[Tuple[str, float]]:
+    """
+    Expand a metric value into ``(row_label, float)`` pairs for the heatmap.
+
+    Scalars map to a single row. n-tuples (lists) are expanded to ``name[i]``
+    rows, and tables (dicts of columns) to ``name.column[label]`` rows using the
+    first all-string column as the row label. Non-numeric entries are skipped, so
+    tuple/table metrics (charge fractions, RT quantiles, ranges, activation/
+    analyzer tables) are visualized instead of silently dropped.
+    """
+    def _num(x: Any) -> Optional[float]:
+        if isinstance(x, bool) or x is None:
+            return None
+        try:
+            f = float(x)
+        except (TypeError, ValueError):
+            return None
+        return f if np.isfinite(f) else np.nan
+
+    rows: List[Tuple[str, float]] = []
+    if value is None or isinstance(value, str):
+        return rows
+    if isinstance(value, bool):
+        return rows
+    if isinstance(value, (int, float)):
+        f = _num(value)
+        if f is not None:
+            rows.append((name, f))
+    elif isinstance(value, (list, tuple)):
+        for i, x in enumerate(value):
+            f = _num(x)
+            if f is not None:
+                rows.append((f"{name}[{i}]", f))
+    elif isinstance(value, dict):
+        labels = None
+        for col, vals in value.items():
+            if isinstance(vals, (list, tuple)) and vals and all(isinstance(v, str) for v in vals):
+                labels = list(vals)
+                break
+        for col, vals in value.items():
+            if not isinstance(vals, (list, tuple)):
+                continue
+            if vals and all(isinstance(v, str) for v in vals):
+                continue  # label / other string column, not a numeric series
+            if list(vals) == list(range(len(vals))):
+                continue  # a pure positional index column (0,1,...,n-1)
+            for i, x in enumerate(vals):
+                f = _num(x)
+                if f is None:
+                    continue
+                lbl = labels[i] if (labels is not None and i < len(labels)) else str(i)
+                rows.append((f"{name}.{col}[{lbl}]", f))
+    return rows
+
+
 # -------------------------------------------------------------------------
 # Core function for library usage
 # -------------------------------------------------------------------------
@@ -3209,30 +3264,27 @@ def calculate_metrics(
 
     # Generate plot if requested
     if generate_plot:
-        # Re-parse the mzQC JSON to get the structured data
-        run_labels, qc_metrics_dict, instrument_metrics_dict = parse_mzqc_metrics(json_str)
+        # Build heatmap rows directly from the structured mzQC values so that
+        # n-tuples and tables (charge fractions, RT quantiles, ranges, analyzer/
+        # activation tables) are expanded into per-element rows rather than
+        # dropped because a list/dict cannot occupy a single heatmap cell.
+        mzqc_data = json.loads(json_str)
+        run_qualities = mzqc_data["mzQC"]["runQualities"]
+        num_runs = len(run_qualities)
 
-        # Prepare data for heatmap
-        all_metrics_for_heatmap = {}
+        run_labels = []
+        for rq in run_qualities:
+            input_files = rq["metadata"].get("inputFiles", [])
+            run_labels.append(input_files[0].get("name") if input_files
+                              else rq["metadata"].get("label", "run"))
 
-        # Number of runs
-        num_runs = len(run_labels)
+        all_metrics_for_heatmap: Dict[str, List[float]] = {}
+        for run_idx, rq in enumerate(run_qualities):
+            for qm in rq["qualityMetrics"]:
+                for row_label, fval in _flatten_metric_for_heatmap(qm["name"], qm.get("value")):
+                    all_metrics_for_heatmap.setdefault(row_label, [np.nan] * num_runs)[run_idx] = fval
 
-        # Add QC metrics
-        for metric_name, metric_data in qc_metrics_dict.items():
-            # Convert formatted values back to numeric where possible, use NaN otherwise
-            values = []
-            for val_str in metric_data['values']:
-                try:
-                    values.append(float(val_str))
-                except (ValueError, TypeError):
-                    values.append(np.nan)
-            # Ensure list has the same length as number of runs, fill with NaN if shorter
-            while len(values) < num_runs:
-                values.append(np.nan)
-            all_metrics_for_heatmap[metric_name] = values
-
-        # Create a DataFrame
+        # Create a DataFrame (rows = metrics, columns = runs)
         df_heatmap = pd.DataFrame(all_metrics_for_heatmap, index=run_labels).T
 
         # Drop rows where all values are NaN
