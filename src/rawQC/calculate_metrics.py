@@ -1551,11 +1551,16 @@ def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     if not specs: return np.nan
     specs = sorted(specs, key=lambda s: s.getRT())
     tic = _ion_counts(specs)
-    # Use index-based quartiling like R implementation
-    # R: ind <- rep(seq_len(4), length.out = length(spectra))
-    # R: Q1ToQ3 <- spectra[ind %in% c(2, 3), ]
+    # Reproduce the MsQuality R partition exactly:
+    #   ind <- rep(seq_len(4), length.out = n); ind <- sort(ind)
+    #   Q1ToQ3 <- spectra[ind %in% c(2, 3), ]
+    # np.resize recycles [1,2,3,4] element-wise to length n (== R's length.out),
+    # then sorting yields R's recycle-and-sort group assignment. The previous
+    # code used np.repeat with ceil(n/4) contiguous blocks, which gives a
+    # different partition whenever n is not divisible by 4 (e.g. n=5: R group
+    # sizes 2/1/1/1 vs. the old 2/2/1/0).
     n = len(specs)
-    ind = np.repeat(np.arange(1, 5), repeats=int(np.ceil(n / 4)))[:n]
+    ind = np.sort(np.resize(np.arange(1, 5), n))
     sel = (ind == 2) | (ind == 3)
     return _nanmedian(tic[sel])
 
