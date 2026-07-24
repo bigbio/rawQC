@@ -333,17 +333,9 @@ METRIC_METADATA = {
     },
 
     # Area under TIC
-    "TIC_MS1_Area_RTQ1": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the first RT quartile (0-25%)."
-    },
-    "TIC_MS1_Area_RTQ2": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the second RT quartile (25-50%)."
-    },
-    "TIC_MS1_Area_RTQ3": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the third RT quartile (50-75%)."
+    "TIC_MS1_Area_RTQuantiles": {
+        "accession": "MS:4000156",
+        "description": "Area under the MS1 TIC for the four retention-time quartiles (0-25%, 25-50%, 50-75%, 75-100%) as one n-tuple."
     },
     "TIC_MS1_Area": {
         "accession": "MS:4000029",
@@ -1627,12 +1619,12 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     order = np.argsort(rts)
     rts, tic = rts[order], tic[order]
     qs = np.quantile(rts, [0.0, 0.25, 0.50, 0.75, 1.0])
-    # Integrate the TIC over retention time (issue #30, area-under-curve), then
-    # split the integral at the quartile RT boundaries. Using the CUMULATIVE
-    # trapezoidal integral and interpolating at each boundary correctly handles
-    # partial trapezoids that straddle a boundary and never spuriously collapses
-    # a sparse quartile to 0 (the earlier per-bin "<2 scans -> 0" rule did). The
-    # four areas sum to the whole-run trapezoidal integral.
+    # Integrate the TIC over retention time (issue #30, area-under-curve) and
+    # split the integral at the quartile RT boundaries (issue #31: all four
+    # values, the minimum-RT scan included via the boundary at qs[0], and the
+    # four areas conserving the whole-run integral). The CUMULATIVE trapezoidal
+    # integral interpolated at each boundary handles partial trapezoids that
+    # straddle a boundary and never spuriously collapses a sparse quartile to 0.
     seg = 0.5 * (tic[1:] + tic[:-1]) * (rts[1:] - rts[:-1])
     cumint = np.concatenate(([0.0], np.cumsum(seg)))  # integral from rts[0] to rts[i]
     bounds = np.interp(qs, rts, cumint)                # cumulative area at each quartile RT
@@ -2479,9 +2471,9 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
 
     computed["TIC_MS1_Area"] = area_under_tic(exp, 1)
     computed["TIC_MS2_Area"] = area_under_tic(exp, 2)
-    computed["TIC_MS1_Area_RTQ1"] = _safe_get(qareas, 0)
-    computed["TIC_MS1_Area_RTQ2"] = _safe_get(qareas, 1)
-    computed["TIC_MS1_Area_RTQ3"] = _safe_get(qareas, 2)
+    # All four RT-quartile areas are emitted as one MS:4000156 n-tuple (the old
+    # code exposed only Q1-Q3 as separate scalars and discarded Q4).
+    computed["TIC_MS1_Area_RTQuantiles"] = [float(x) for x in qareas]
     computed["MedianTIC_in_RT_MS1_IQR"] = median_tic_rt_iqr(exp, 1)
     computed["TIC_MS1_MedianInHalfRange"] = median_tic_of_rt_range(exp, 1)
     computed["RT_TIC_Q0"] = _safe_get(tfr, 0)
@@ -2590,9 +2582,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "RT_MS1_IQRRate",
         "TIC_MS1_Area",
         "TIC_MS2_Area",
-        "TIC_MS1_Area_RTQ1",
-        "TIC_MS1_Area_RTQ2",
-        "TIC_MS1_Area_RTQ3",
+        "TIC_MS1_Area_RTQuantiles",
         "MedianTIC_in_RT_MS1_IQR",
         "TIC_MS1_MedianInHalfRange",
         "RT_TIC_Q0",
