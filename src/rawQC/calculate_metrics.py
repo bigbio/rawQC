@@ -670,6 +670,42 @@ def _nanmedian(arr: Union[np.ndarray, List[float]]) -> float:
 # -------------------------------------------------------------------------
 # Helper functions for polarity and chromatogram analysis
 # -------------------------------------------------------------------------
+def _enum_name_map(enum_cls: Any) -> Dict[int, str]:
+    """Build an ``int -> member-name`` mapping for a pyOpenMS enum class.
+
+    pyOpenMS 3.4.0 removed the ``*ToString`` binding helpers that older code
+    relied on (``IonSource.polarityToString`` etc.), but the enum members are
+    still exposed as class attributes. This reconstructs the reverse mapping
+    from those members so conversions work on the declared minimum version.
+    """
+    mapping: Dict[int, str] = {}
+    for member in dir(enum_cls):
+        if not member.isupper() or "SIZE_OF" in member:
+            continue
+        try:
+            mapping[int(getattr(enum_cls, member))] = member
+        except (TypeError, ValueError):
+            continue
+    return mapping
+
+
+# Reverse enum maps computed once at import time.
+_POLARITY_NAMES = {
+    int(oms.IonSource.Polarity.POSITIVE): "positive",
+    int(oms.IonSource.Polarity.NEGATIVE): "negative",
+}
+_SPECTRUM_TYPE_NAMES = {
+    int(oms.SpectrumSettings.SpectrumType.CENTROID): "centroid",
+    int(oms.SpectrumSettings.SpectrumType.PROFILE): "profile",
+}
+_ACTIVATION_METHOD_NAMES = _enum_name_map(oms.Precursor.ActivationMethod)
+_ANALYZER_TYPE_NAMES = _enum_name_map(oms.MassAnalyzer.AnalyzerType)
+
+# Metavalue key under which OpenMS stores the FAIMS compensation voltage
+# (mirrors OpenMS' FAIMSHelper, which is not bound in pyOpenMS 3.4.0).
+_FAIMS_CV_KEY = "FAIMS_CV"
+
+
 def _polarity_to_str(pol: Any) -> str:
     """
     Convert InstrumentSettings.Polarity enum to string.
@@ -680,7 +716,41 @@ def _polarity_to_str(pol: Any) -> str:
     Returns:
         str: "positive", "negative", or "unknown"
     """
-    return oms.IonSource().polarityToString(pol)
+    return _POLARITY_NAMES.get(int(pol), "unknown")
+
+
+def _spectrum_type_to_str(spectrum_type: Any) -> str:
+    """Convert a ``SpectrumSettings.SpectrumType`` enum value to a string.
+
+    Returns "centroid", "profile", or "unknown".
+    """
+    return _SPECTRUM_TYPE_NAMES.get(int(spectrum_type), "unknown")
+
+
+def _activation_method_to_str(method: Any) -> str:
+    """Convert a ``Precursor.ActivationMethod`` enum value to its short name."""
+    return _ACTIVATION_METHOD_NAMES.get(int(method), "unknown")
+
+
+def _analyzer_type_to_str(analyzer_type: Any) -> str:
+    """Convert a ``MassAnalyzer.AnalyzerType`` enum value to its name."""
+    return _ANALYZER_TYPE_NAMES.get(int(analyzer_type), "unknown")
+
+
+def _faims_compensation_voltages(exp: oms.MSExperiment) -> List[float]:
+    """Collect distinct FAIMS compensation voltages present in the run.
+
+    Replacement for OpenMS' ``FAIMSHelper::getCompensationVoltages`` (not bound
+    in pyOpenMS 3.4.0): iterate spectra and read the ``FAIMS_CV`` metavalue.
+    """
+    voltages = set()
+    for spec in exp:
+        if spec.metaValueExists(_FAIMS_CV_KEY):
+            try:
+                voltages.add(float(spec.getMetaValue(_FAIMS_CV_KEY)))
+            except (TypeError, ValueError):
+                continue
+    return sorted(voltages)
 
 def _extract_spectrum_polarity(spec: oms.MSSpectrum) -> str:
     """
@@ -1876,12 +1946,12 @@ def peak_type_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
         # Get annotated peak type from metadata (once per level)
         if level not in level_annotated:
             # Map SpectrumSettings.SpectrumType enum to string
-            level_annotated[level] = oms.SpectrumSettings().spectrumTypeToString(spec.getType())
+            level_annotated[level] = _spectrum_type_to_str(spec.getType())
 
         # Estimate peak type from data (once per level, need enough peaks)
         if level not in level_estimated and spec.size() > 10:
             estimated = oms.PeakTypeEstimator().estimateType(spec)
-            level_estimated[level] = oms.SpectrumSettings().spectrumTypeToString(estimated)
+            level_estimated[level] = _spectrum_type_to_str(estimated)
 
     result = {}
     for level in sorted(set(list(level_annotated.keys()) + list(level_estimated.keys()))):
@@ -1910,7 +1980,7 @@ def activation_method_statistics(exp: oms.MSExperiment) -> Dict[str, int]:
         level = int(spec.getMSLevel())
         for pc in spec.getPrecursors():
             for am in pc.getActivationMethods():
-                am_name = oms.Precursor().activationMethodToShortString(am)
+                am_name = _activation_method_to_str(am)
 
                 key = f"MS{level}_ActivationMethod_{am_name}"
                 act_method_counts[key] += 1
@@ -1938,7 +2008,7 @@ def mass_analyzer_info(exp: oms.MSExperiment) -> Dict[str, Any]:
         if analyzers:
             for idx, ma in enumerate(analyzers):
                 # Get analyzer type
-                ma_type = oms.MassAnalyzer().analyzerTypeToString(ma.getType())
+                ma_type = _analyzer_type_to_str(ma.getType())
                 result[f"MassAnalyzer_{idx}_Type"] = ma_type
 
                 # Get resolution if available
@@ -2002,7 +2072,7 @@ def faims_compensation_voltages(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
     result = {}
 
-    cvs = oms.FAIMSHelper().getCompensationVoltages(exp)
+    cvs = _faims_compensation_voltages(exp)
     if cvs:
         result["FAIMS_CV_Count"] = len(cvs)
         result["FAIMS_CV_Values"] = [float(cv) for cv in cvs]
