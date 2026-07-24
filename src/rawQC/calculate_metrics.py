@@ -1260,17 +1260,27 @@ def ms_signal_10x_change(exp: oms.MSExperiment, change: str = "jump", ms_level: 
         >>> jumps = ms_signal_10x_change(exp, change="jump", ms_level=1)
         >>> falls = ms_signal_10x_change(exp, change="fall", ms_level=1)
     """
+    if change not in ("jump", "fall"):
+        raise ValueError(f"change must be 'jump' or 'fall', got {change!r}")
     specs = _filter_by_mslevel(exp, ms_level)
-    if len(specs) < 2: return np.nan
+    # The CV terms require an integer count. With fewer than two spectra there
+    # are no adjacent pairs, so the count is 0 (not NaN).
+    if len(specs) < 2:
+        return 0
     specs = sorted(specs, key=lambda s: s.getRT())
     tic = _ion_counts(specs)
     prev, foll = tic[:-1], tic[1:]
-    with np.errstate(divide='ignore', invalid='ignore'):
-        ratio = foll / prev
+    # Only adjacent pairs with a finite, strictly positive previous TIC define a
+    # meaningful fold-change. Pairs with a non-finite or zero denominator (empty
+    # or missing scans) are excluded rather than being turned into inf/NaN by the
+    # division. A fall to exactly zero (prev>0, foll==0) still counts as a >=10x
+    # fall; a jump *from* zero is undefined and is not counted.
+    valid = np.isfinite(prev) & np.isfinite(foll) & (prev > 0.0)
+    ratio = foll[valid] / prev[valid]
     if change == "jump":
-        return int(np.nansum(ratio >= 10.0))
+        return int(np.sum(ratio >= 10.0))
     else:
-        return int(np.nansum(ratio <= 0.1))
+        return int(np.sum(ratio <= 0.1))
 
 def number_empty_scans(exp: oms.MSExperiment, ms_level: int = 1) -> int:
     """
@@ -2426,8 +2436,10 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["RT_TIC_Q2"] = _safe_get(tfr, 2)
     computed["RT_TIC_Q3"] = _safe_get(tfr, 3)
     computed["RT_TIC_Q4"] = _safe_get(tfr, 4)
-    computed["TIC_MS1_CV"] = float(np.std(tic_ms1) / np.mean(tic_ms1)) if tic_ms1.size > 1 and np.mean(tic_ms1) else np.nan
-    computed["TIC_MS2_CV"] = float(np.std(tic_ms2) / np.mean(tic_ms2)) if tic_ms2.size > 1 and np.mean(tic_ms2) else np.nan
+    # Coefficient of variation uses the *sample* standard deviation (ddof=1),
+    # consistent with the precursor-intensity SD (MS:4000118) and R's sd().
+    computed["TIC_MS1_CV"] = float(np.std(tic_ms1, ddof=1) / np.mean(tic_ms1)) if tic_ms1.size > 1 and np.mean(tic_ms1) else np.nan
+    computed["TIC_MS2_CV"] = float(np.std(tic_ms2, ddof=1) / np.mean(tic_ms2)) if tic_ms2.size > 1 and np.mean(tic_ms2) else np.nan
 
     computed["TIC_MS1_SignalJump10x_Count"] = ms_signal_10x_change(exp, "jump", 1)
     computed["TIC_MS1_SignalFall10x_Count"] = ms_signal_10x_change(exp, "fall", 1)
