@@ -488,22 +488,38 @@ METRIC_METADATA = {
         "description": "Maximum retention time covered by chromatograms (seconds)."
     },
 
-    # Peak type statistics
+    # Peak type statistics (aggregated over all spectra of the level)
     "MS1_PeakType_Annotated": {
         "accession": None,
-        "description": "Peak type from metadata for MS1 (centroid, profile, or unknown)."
+        "description": "Metadata peak type for MS1 aggregated over the run (centroid, profile, mixed, or unknown)."
+    },
+    "MS1_PeakType_Annotated_ProfileFraction": {
+        "accession": None,
+        "description": "Fraction of type-resolved MS1 spectra annotated as profile."
     },
     "MS1_PeakType_Estimated": {
         "accession": None,
-        "description": "Peak type estimated from peak spacing for MS1 (centroid, profile, or unknown)."
+        "description": "Peak type estimated from peak spacing for MS1 aggregated over the run (centroid, profile, mixed, or unknown)."
+    },
+    "MS1_PeakType_Estimated_ProfileFraction": {
+        "accession": None,
+        "description": "Fraction of estimatable MS1 spectra estimated as profile."
     },
     "MS2_PeakType_Annotated": {
         "accession": None,
-        "description": "Peak type from metadata for MS2 (centroid, profile, or unknown)."
+        "description": "Metadata peak type for MS2 aggregated over the run (centroid, profile, mixed, or unknown)."
+    },
+    "MS2_PeakType_Annotated_ProfileFraction": {
+        "accession": None,
+        "description": "Fraction of type-resolved MS2 spectra annotated as profile."
     },
     "MS2_PeakType_Estimated": {
         "accession": None,
-        "description": "Peak type estimated from peak spacing for MS2 (centroid, profile, or unknown)."
+        "description": "Peak type estimated from peak spacing for MS2 aggregated over the run (centroid, profile, mixed, or unknown)."
+    },
+    "MS2_PeakType_Estimated_ProfileFraction": {
+        "accession": None,
+        "description": "Fraction of estimatable MS2 spectra estimated as profile."
     },
 
     # Mass analyzer information
@@ -2094,40 +2110,70 @@ def fastest_ms_frequency(exp: oms.MSExperiment, ms_level: int = 1, window: float
     return float(max_count / window)
 
 
+def _peak_type_summary(counts: Dict[str, int]) -> str:
+    """Summarize per-level peak-type counts into a stable run-wide label."""
+    centroid = counts.get("centroid", 0)
+    profile = counts.get("profile", 0)
+    if centroid and profile:
+        return "mixed"
+    if profile:
+        return "profile"
+    if centroid:
+        return "centroid"
+    return "unknown"
+
+
+def _profile_fraction(counts: Dict[str, int]) -> float:
+    """Fraction of type-resolved spectra that are profile (NaN if none)."""
+    denom = counts.get("centroid", 0) + counts.get("profile", 0)
+    return float(counts.get("profile", 0) / denom) if denom else np.nan
+
+
 def peak_type_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
     Determine peak type (profile vs centroided) per MS level.
 
-    Uses both metadata annotation and estimation from peak spacing.
+    Aggregates over **all** spectra of each MS level rather than sampling the
+    first spectrum, so a mixed profile/centroid run (or a misleading first
+    spectrum) is reported as "mixed" instead of being presented as homogeneous.
+    For each level and for both the metadata annotation and the peak-spacing
+    estimation, a stable summary label is produced:
+
+        * "centroid" / "profile" -- all type-resolved spectra agree
+        * "mixed"                 -- both centroid and profile occur
+        * "unknown"               -- no spectrum carried a resolvable type
+
+    A companion ``*_ProfileFraction`` value gives the fraction of type-resolved
+    spectra that are profile, exposing annotation-vs-estimation disagreement and
+    the degree of mixing.
 
     Args:
         exp: MSExperiment object
 
     Returns:
-        dict: Peak types per MS level (annotated and estimated)
+        dict: Peak-type summaries and profile fractions per MS level
     """
     from collections import defaultdict
 
-    level_annotated = {}
-    level_estimated = {}
+    annotated_counts: Dict[int, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    estimated_counts: Dict[int, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
+    estimator = oms.PeakTypeEstimator()
     for spec in exp:
         level = int(spec.getMSLevel())
+        annotated_counts[level][_spectrum_type_to_str(spec.getType())] += 1
+        # Estimation needs enough peaks to be meaningful.
+        if spec.size() > 10:
+            estimated_counts[level][_spectrum_type_to_str(estimator.estimateType(spec))] += 1
 
-        # Get annotated peak type from metadata (once per level)
-        if level not in level_annotated:
-            # Map SpectrumSettings.SpectrumType enum to string
-            level_annotated[level] = _spectrum_type_to_str(spec.getType())
-
-        # Estimate peak type from data (once per level, need enough peaks)
-        if level not in level_estimated and spec.size() > 10:
-            estimated = oms.PeakTypeEstimator().estimateType(spec)
-            level_estimated[level] = _spectrum_type_to_str(estimated)
-
-    result = {}
-    for level in sorted(set(list(level_annotated.keys()) + list(level_estimated.keys()))):
-        result[f"MS{level}_PeakType_Annotated"] = level_annotated.get(level, "unknown")
-        result[f"MS{level}_PeakType_Estimated"] = level_estimated.get(level, "unknown")
+    result: Dict[str, Any] = {}
+    for level in sorted(set(annotated_counts) | set(estimated_counts)):
+        ann = annotated_counts.get(level, {})
+        est = estimated_counts.get(level, {})
+        result[f"MS{level}_PeakType_Annotated"] = _peak_type_summary(ann)
+        result[f"MS{level}_PeakType_Annotated_ProfileFraction"] = _profile_fraction(ann)
+        result[f"MS{level}_PeakType_Estimated"] = _peak_type_summary(est)
+        result[f"MS{level}_PeakType_Estimated_ProfileFraction"] = _profile_fraction(est)
 
     return result
 
@@ -2580,9 +2626,13 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "PeakDensity_MS2_Q2",
         "PeakDensity_MS2_Q3",
         "MS1_PeakType_Annotated",
+        "MS1_PeakType_Annotated_ProfileFraction",
         "MS1_PeakType_Estimated",
+        "MS1_PeakType_Estimated_ProfileFraction",
         "MS2_PeakType_Annotated",
+        "MS2_PeakType_Annotated_ProfileFraction",
         "MS2_PeakType_Estimated",
+        "MS2_PeakType_Estimated_ProfileFraction",
         "BasePeak_MS1_Mean",
         "BasePeak_MS2_Mean",
         "BasePeak_All_Max",
