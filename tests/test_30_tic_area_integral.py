@@ -1,0 +1,50 @@
+"""Regression tests for issue #30.
+
+MS:4000029/030/155/156 are "area under the total ion chromatogram" terms. On
+irregularly sampled data a per-spectrum sum is not an area. rawQC now computes a
+true trapezoidal time integral of the TIC against retention time, which is
+distinguishable from a sum on an irregular-RT fixture.
+"""
+import math
+
+import numpy as np
+import pyopenms as oms
+
+from rawQC.calculate_metrics import area_under_tic, compute_qc_metrics
+
+
+def _ms1_run(rt_tic):
+    exp = oms.MSExperiment()
+    for rt, tic in rt_tic:
+        sp = oms.MSSpectrum()
+        sp.setRT(float(rt))
+        sp.setMSLevel(1)
+        sp.set_peaks((np.array([500.0]), np.array([float(tic)])))
+        exp.addSpectrum(sp)
+    exp.updateRanges()
+    return exp
+
+
+def test_integral_differs_from_sum_on_irregular_rt():
+    # RTs 0, 1, 10 with constant TIC 10.
+    # sum = 30; trapezoidal integral = 10*1 + 10*9 = 100.
+    exp = _ms1_run([(0, 10), (1, 10), (10, 10)])
+    assert area_under_tic(exp, 1) == 100.0
+    assert area_under_tic(exp, 1) != 30.0
+
+
+def test_regular_sampling_integral():
+    # RTs 0,1,2,3 TIC 10,20,30,40 -> trapz = 15+25+35 = 75
+    exp = _ms1_run([(0, 10), (1, 20), (2, 30), (3, 40)])
+    assert area_under_tic(exp, 1) == 75.0
+
+
+def test_single_scan_is_nan():
+    exp = _ms1_run([(5, 100)])
+    assert math.isnan(area_under_tic(exp, 1))
+
+
+def test_wired_into_compute():
+    exp = _ms1_run([(0, 10), (1, 10), (10, 10)])
+    m = compute_qc_metrics(exp)
+    assert m["TIC_MS1_Area"] == 100.0
