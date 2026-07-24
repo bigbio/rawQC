@@ -1003,6 +1003,11 @@ def peak_density_quantiles(exp: oms.MSExperiment, ms_level: int = 1,
         >>> q_ms2 = peak_density_quantiles(exp, ms_level=2)
     """
     specs = sorted(_filter_by_mslevel(exp, ms_level), key=lambda s: s.getRT())
+    # QuaMeter (the origin of MS:4000061/MS:4000062) skips spectra with
+    # defaultArrayLength == 0 before accumulating peak counts, so zero-length
+    # scans must not enter the density distribution as artificial 0-peak scans.
+    # Empty scans are reported separately by MS:4000099/MS:4000100.
+    specs = [s for s in specs if s.size() > 0]
     if not specs:
         return [np.nan for _ in probs]
 
