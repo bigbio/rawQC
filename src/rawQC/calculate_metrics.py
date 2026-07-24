@@ -353,6 +353,10 @@ METRIC_METADATA = {
         "accession": None,
         "description": "Standard deviation of MS2 precursor intensities."
     },
+    "PrecursorIntensity_FallbackCount": {
+        "accession": None,
+        "description": "Number of MS2 precursors whose zero/unrecorded intensity was replaced by the spectrum MS2 TIC (QuaMeter fallback)."
+    },
 
     # Median precursor m/z
     "PrecursorMz_MS2_Median": {
@@ -631,9 +635,55 @@ def _precursor_values(specs: List[oms.MSSpectrum]) -> Tuple[np.ndarray, np.ndarr
             continue
         p = precs[0]
         mzs.append(float(p.getMZ()) if p.getMZ() else np.nan)
-        intens.append(float(p.getIntensity()) if p.getIntensity() else np.nan)
+        # A present precursor keeps its recorded intensity, including a legitimate
+        # 0.0 (truthiness would silently turn 0.0 into NaN and drop it). Only an
+        # absent precursor (handled above) yields NaN.
+        intens.append(float(p.getIntensity()))
         charges.append(int(p.getCharge()) if p.getCharge() else np.nan)
     return np.array(mzs, dtype=float), np.array(intens, dtype=float), np.array(charges, dtype=float)
+
+
+def precursor_intensities(specs: List[oms.MSSpectrum],
+                          fallback_to_ms2_tic: bool = True) -> Tuple[np.ndarray, int, int]:
+    """
+    Extract MSn precursor intensities with an explicit zero/missing policy.
+
+    QuaMeter detects a zero or unrecorded precursor intensity and falls back to
+    the corresponding MSn (MS2) total ion current, so a recorded 0.0 is not
+    silently dropped. rawQC follows that convention by default:
+
+      * spectrum with no precursor      -> NaN (counted as ``n_missing``)
+      * precursor intensity <= 0        -> the spectrum's TIC (counted as
+                                           ``n_fallback``) when
+                                           ``fallback_to_ms2_tic`` is True,
+                                           otherwise the value 0.0 is preserved
+      * precursor intensity  > 0        -> that intensity
+
+    Args:
+        specs: list of MSSpectrum objects (typically MS2)
+        fallback_to_ms2_tic: apply the QuaMeter MS2-TIC fallback (default True)
+
+    Returns:
+        tuple: (intensities, n_fallback, n_missing)
+    """
+    vals: List[float] = []
+    n_fallback = 0
+    n_missing = 0
+    for sp in specs:
+        precs = sp.getPrecursors()
+        if not precs:
+            vals.append(np.nan)
+            n_missing += 1
+            continue
+        inten = float(precs[0].getIntensity())
+        if inten <= 0.0:
+            if fallback_to_ms2_tic:
+                inten = float(sp.calculateTIC())
+                n_fallback += 1
+            else:
+                inten = 0.0
+        vals.append(inten)
+    return np.array(vals, dtype=float), n_fallback, n_missing
 
 def _iqr(arr: Union[np.ndarray, List[float]]) -> float:
     """
@@ -1289,7 +1339,7 @@ def precursor_intensity_stats(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[
         >>> print(stats['PrecursorIntensity_Q2'])  # median
     """
     specs = _filter_by_mslevel(exp, ms_level)
-    _, preI, _ = _precursor_values(specs)
+    preI, _, _ = precursor_intensities(specs)
     preI = preI[~np.isnan(preI)]
     if preI.size == 0:
         return {
@@ -1554,7 +1604,7 @@ def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int =
     """
     # computed over all MS2 precursors (no ID info in plain mzML)
     specs = _filter_by_mslevel(exp, ms_level)
-    _, preI, _ = _precursor_values(specs)
+    preI, _, _ = precursor_intensities(specs)
     preI = preI[~np.isnan(preI)]
     if preI.size == 0: return np.nan
     q5, q95 = np.quantile(preI, [0.05, 0.95])
@@ -2369,6 +2419,8 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["PrecursorMz_MS2_Median"] = median_precursor_mz(exp, 2)
     computed["ExtentPrecursorIntensity_95over5_MS2"] = extent_identified_precursor_intensity(exp, 2)
     computed.update(precursor_intensity_stats(exp, 2))
+    _, _n_prec_fallback, _ = precursor_intensities(ms2_specs)
+    computed["PrecursorIntensity_FallbackCount"] = int(_n_prec_fallback)
 
     computed["ChargeMin"] = charge_info.get("ChargeMin", np.nan)
     computed["ChargeMax"] = charge_info.get("ChargeMax", np.nan)
@@ -2482,6 +2534,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "PrecursorIntensity_Q3",
         "PrecursorIntensity_Mean",
         "PrecursorIntensity_Sd",
+        "PrecursorIntensity_FallbackCount",
         "ExtentPrecursorIntensity_95over5_MS2",
         "MS2_ActivationMethod_0",
         "Chromatograms_RT_Min",
