@@ -82,9 +82,9 @@ METRIC_METADATA = {
         "accession": None,
         "description": "Total number of peaks across all spectra in the run."
     },
-    "NumberOfChromatographicPeaks": {
+    "NumberOfChromatogramDataPoints": {
         "accession": None,
-        "description": "Total number of peaks across all chromatograms."
+        "description": "Total number of data points across all chromatograms (stored array lengths, not resolved chromatographic peaks)."
     },
 
     # FAIMS
@@ -459,17 +459,17 @@ METRIC_METADATA = {
         "accession": None,
         "description": "Number of Selected Reaction Monitoring (SRM) chromatograms."
     },
-    "Chromatograms_MRM": {
-        "accession": None,
-        "description": "Number of Multiple Reaction Monitoring (MRM) chromatograms."
-    },
-    "Chromatograms_XIC": {
-        "accession": None,
-        "description": "Number of Extracted Ion Chromatograms (XIC)."
-    },
     "Chromatograms_SIM": {
         "accession": None,
         "description": "Number of Selected Ion Monitoring (SIM) chromatograms."
+    },
+    "Chromatograms_XIC": {
+        "accession": None,
+        "description": "Number of extracted-ion / mass chromatograms (XIC)."
+    },
+    "Chromatograms_SIC": {
+        "accession": None,
+        "description": "Number of Selected Ion Current (SIC) chromatograms."
     },
     "Chromatograms_Unknown": {
         "accession": None,
@@ -2048,17 +2048,34 @@ def total_peak_count(exp: oms.MSExperiment) -> int:
     """
     return sum(spec.size() for spec in exp)
 
-def chromatogram_peak_count(exp: oms.MSExperiment) -> int:
+def chromatogram_point_count(exp: oms.MSExperiment) -> int:
     """
-    Count total number of chromatographic peaks.
+    Count total number of chromatogram data points.
+
+    This sums the array lengths of all chromatograms, i.e. the number of stored
+    (RT, intensity) data points, NOT the number of resolved chromatographic
+    peaks. Peak detection is not performed here, so the metric is named
+    accordingly (see NumberOfChromatogramDataPoints).
 
     Args:
         exp: MSExperiment object
 
     Returns:
-        int: Total chromatographic peak count
+        int: Total chromatogram data-point count
     """
     return sum(chrom.size() for chrom in exp.getChromatograms())
+
+
+# OpenMS ChromatogramSettings.ChromatogramType (int) -> stable short key used for
+# the Chromatograms_* metric names. Any value not listed maps to "Unknown".
+_CHROM_TYPE_KEYS = {
+    0: "XIC",   # MASS_CHROMATOGRAM (extracted-ion / mass chromatogram)
+    1: "TIC",   # TOTAL_ION_CURRENT_CHROMATOGRAM
+    2: "SIC",   # SELECTED_ION_CURRENT_CHROMATOGRAM
+    3: "BPC",   # BASEPEAK_CHROMATOGRAM
+    4: "SIM",   # SELECTED_ION_MONITORING_CHROMATOGRAM
+    5: "SRM",   # SELECTED_REACTION_MONITORING_CHROMATOGRAM
+}
 
 def faims_compensation_voltages(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
@@ -2087,8 +2104,13 @@ def chromatogram_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
 
     Analyzes all chromatograms in the mzML file to determine:
     - Total number of chromatograms
-    - Counts by type (TIC, BPC, SRM, MRM, XIC, etc.)
+    - Counts by type keyed by stable short names (TIC, BPC, SRM, SIM, XIC, SIC,
+      Unknown), mapped from the OpenMS ChromatogramType enum
     - RT range covered by chromatograms
+
+    RT-range policy: only finite chromatogram RT bounds contribute. If there are
+    no chromatograms (or none with finite RT bounds, e.g. all empty), the RT
+    range is (NaN, NaN).
 
     Args:
         exp: MSExperiment object
@@ -2105,36 +2127,26 @@ def chromatogram_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
     chroms = exp.getChromatograms()
     chrom_total = len(chroms)
 
-    chrom_type_counts = Counter()
-    
-    # Map common chromatogram PSI-MS accessions to readable names
-    PSI_CHROM_TYPES = {
-        "MS:1000235": "tic",                      # total ion current chromatogram
-        "MS:1000627": "bpc",                      # base peak chromatogram
-        "MS:1001472": "srm",                      # SRM chromatogram
-        "MS:1001473": "sim",                      # SIM chromatogram
-        "MS:1000628": "selected_ion_current",     # SIC
-        "MS:1001474": "mrm",                      # MRM chromatogram
-        "MS:1002007": "xic",                      # extracted ion chromatogram
-    }
-    
-    # fallback when no chromatogram type is set or recognized
+    chrom_type_counts: "Counter" = Counter()
     chrom_rt_min = np.nan
     chrom_rt_max = np.nan
-        
-    ChromatogramNames = ["mass chromatogram", "total ion current chromatogram", "selected ion current chromatogram" ,"base peak chromatogram",
-                                                                "selected ion monitoring chromatogram" ,"selected reaction monitoring chromatogram" ,"electromagnetic radiation chromatogram",
-                                                                "absorption chromatogram", "emission chromatogram", "unknown chromatogram"]
+
     for ch in chroms:
-        # Determine chromatogram type from metadata
-        cname = ChromatogramNames[ch.getChromatogramType()] if ch.getChromatogramType() < len(ChromatogramNames) else "unknown"
+        key = _CHROM_TYPE_KEYS.get(int(ch.getChromatogramType()), "Unknown")
+        chrom_type_counts[key] += 1
 
-        chrom_type_counts[cname] += 1
-
-        # RT coverage
-        ch.updateRanges()  # Ensure RT range is updated
-        chrom_rt_min = np.nanmin([chrom_rt_min, ch.getMinRT()])
-        chrom_rt_max = np.nanmax([chrom_rt_max, ch.getMaxRT()])
+        # RT coverage: empty chromatograms have no (uninitialized) range and must
+        # not corrupt the overall bounds. Only non-empty chromatograms with
+        # finite RT bounds contribute.
+        if ch.size() == 0:
+            continue
+        ch.updateRanges()
+        cmin = ch.getMinRT()
+        cmax = ch.getMaxRT()
+        if np.isfinite(cmin):
+            chrom_rt_min = cmin if np.isnan(chrom_rt_min) else min(chrom_rt_min, cmin)
+        if np.isfinite(cmax):
+            chrom_rt_max = cmax if np.isnan(chrom_rt_max) else max(chrom_rt_max, cmax)
 
     return {
         "total_chromatograms": chrom_total,
@@ -2185,7 +2197,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["MS1_to_MS2_Ratio"] = float(len(ms1_specs) / len(ms2_specs)) if len(ms2_specs) > 0 else np.nan
     computed["ChromatographyDuration"] = chromatography_duration(exp)
     computed["NumberOfChromatograms"] = chrom_stats["total_chromatograms"]
-    computed["NumberOfChromatographicPeaks"] = chromatogram_peak_count(exp)
+    computed["NumberOfChromatogramDataPoints"] = chromatogram_point_count(exp)
     computed["NumberOfSpectralPeaks"] = total_peak_count(exp)
 
     for level in (1, 2):
@@ -2303,9 +2315,10 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed.update(activation_methods)
     computed.update(faims_info)
 
+    # counts_by_type is already keyed by stable short names (TIC/BPC/SRM/SIM/XIC/
+    # SIC/Unknown), so the metric names map directly to METRIC_METADATA.
     for chrom_type, count in chrom_stats["counts_by_type"].items():
-        type_key = chrom_type.upper() if chrom_type != "unknown" else "Unknown"
-        computed[f"Chromatograms_{type_key}"] = count
+        computed[f"Chromatograms_{chrom_type}"] = count
     computed["Chromatograms_RT_Min"] = chrom_stats["rt_range_min"]
     computed["Chromatograms_RT_Max"] = chrom_stats["rt_range_max"]
 
@@ -2316,7 +2329,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "MS1_to_MS2_Ratio",
         "ChromatographyDuration",
         "NumberOfChromatograms",
-        "NumberOfChromatographicPeaks",
+        "NumberOfChromatogramDataPoints",
         "NumberOfSpectralPeaks",
         "Polarity_MS1_unknown",
         "Polarity_MS2_unknown",
