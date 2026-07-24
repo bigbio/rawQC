@@ -215,26 +215,10 @@ METRIC_METADATA = {
         "description": "Log ratio of MS1 TIC Q4 to Q3."
     },
 
-    # TIC quantile RT fractions
-    "RT_TIC_Q0": {
+    # TIC accumulation RT quantiles (four interval fractions as one n-tuple)
+    "RT_TIC_Quantiles": {
         "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 0% of total TIC."
-    },
-    "RT_TIC_Q1": {
-        "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 25% of total TIC."
-    },
-    "RT_TIC_Q2": {
-        "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 50% of total TIC."
-    },
-    "RT_TIC_Q3": {
-        "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 75% of total TIC."
-    },
-    "RT_TIC_Q4": {
-        "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 100% of total TIC."
+        "description": "The four RT interval fractions between the retention times at which the cumulative MS1 TIC reaches 25/50/75% of the total, normalized by the MS1 acquisition duration; sums to 1.0."
     },
 
     # Charge metrics
@@ -1617,76 +1601,80 @@ def median_tic_of_rt_range(exp: oms.MSExperiment, ms_level: int = 1) -> float:
             best_slice = slice(i, i + half)
     return _nanmedian(tic[best_slice])
 
-def tic_quantile_rt_fraction(exp: oms.MSExperiment, ms_level: int = 1, probs: Tuple[float, ...] = (0.0, 0.25, 0.50, 0.75, 1.0), relative: bool = True) -> List[float]:
+def tic_quantile_rt_fraction(exp: oms.MSExperiment, ms_level: int = 1) -> List[float]:
     """
-    TIC quantile RT fraction (MS:4000183).
+    TIC accumulation RT quantiles (MS:4000183).
 
     MS:4000183:
     "The interval when the respective quantile of the TIC accumulates divided by
     retention time duration. The number of values in the tuple implies the
     quantile mode." [PSI:MS]
 
-    The metric informs about the dynamic range of the acquisition along the
-    chromatographic separation. The metric provides information on the sample
-    (compound) flow along the chromatographic run, potentially revealing poor
-    chromatographic performance, such as the absence of a signal for a
-    significant portion of the run.
+    Normative contract (issue #32): the current term describes an n-tuple of
+    RT *intervals*, and the original QuaMeter implementation returns four
+    consecutive interval widths normalized by the MS-level duration. rawQC
+    reproduces the QuaMeter definition:
 
-    The metric is calculated as follows:
-    (1) The spectra are ordered according to retention time,
-    (2) The cumulative sum of the ion count is calculated (TIC),
-    (3) The quantiles are calculated according to the probs argument,
-    (4) The retention time/relative retention time (retention time divided by
-        the total run time taking into account the minimum retention time) is
-        calculated,
-    (5) The (relative) duration of the LC run after which the cumulative TIC
-        exceeds (for the first time) the respective quantile of the cumulative
-        TIC is calculated and returned.
+        t1,t2,t3 = retention times at which the cumulative TIC first reaches
+                   25%, 50%, 75% of the total TIC
+        interval_1 = (t1 - RTmin) / duration
+        interval_2 = (t2 - t1)    / duration
+        interval_3 = (t3 - t2)    / duration
+        interval_4 = (RTmax - t3) / duration
+
+    where ``duration`` is the acquisition span of *this MS level* (RTmax - RTmin
+    of the level), not the whole experiment. The four intervals sum to 1.0.
+
+    This replaces the previous behavior, which emitted five cumulative RT
+    positions normalized by the whole-experiment duration across all MS levels.
+    If the MsQuality cumulative-position representation is needed, it should be
+    exposed as a separately named custom metric.
 
     Details:
         MS:4000183
-        synonym: "RT-TIC-Q1" RELATED [PMID:24494671]
-        synonym: "RT-TIC-Q2" RELATED [PMID:24494671]
-        synonym: "RT-TIC-Q3" RELATED [PMID:24494671]
-        synonym: "RT-TIC-Q4" RELATED [PMID:24494671]
+        synonym: "RT-TIC-Q1..Q4" RELATED [PMID:24494671]
         is_a: MS:4000004 ! n-tuple
-        relationship: has_metric_category MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000016 ! retention time metric
-        relationship: has_metric_category MS:4000017 ! chromatogram metric
         relationship: has_units UO:0000191 ! fraction
-        relationship: has_value_concept STATO:0000291
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 1)
-        probs: tuple, quantiles to calculate (default: (0.0, 0.25, 0.5, 0.75, 1.0))
-        relative: bool, return relative RT (True) or absolute RT (False)
 
     Returns:
-        list: Float values representing RT fractions for each quantile
+        list: four RT interval fractions (summing to 1.0), or [NaN]*4
 
     Example:
         >>> fractions = tic_quantile_rt_fraction(exp, ms_level=1)
     """
     specs = _filter_by_mslevel(exp, ms_level)
-    if not specs: return [np.nan]*len(probs)
+    if not specs:
+        return [np.nan] * 4
     specs = sorted(specs, key=lambda s: s.getRT())
     rts = _rts(specs)
-    tic_cum = np.cumsum(_ion_counts(specs))
-    total = float(np.max(tic_cum)) if tic_cum.size else 0.0
-    idxs = []
-    for p in probs:
-        target = p * total
-        idx = int(np.argmax(tic_cum >= target))
-        idxs.append(idx)
-    if relative:
-        rtmin = float(np.min(rts))
-        dur = chromatography_duration(exp)
-        if not dur or not np.isfinite(dur):
-            return [np.nan]*len(probs)
-        return [float((rts[i]-rtmin)/dur) for i in idxs]
-    else:
-        return [float(rts[i]) for i in idxs]
+    tic = _ion_counts(specs)
+    finite = np.isfinite(rts)
+    rts, tic = rts[finite], tic[finite]
+    if rts.size < 2:
+        return [np.nan] * 4
+    rtmin, rtmax = float(rts[0]), float(rts[-1])
+    duration = rtmax - rtmin
+    if duration <= 0:
+        return [np.nan] * 4
+    cum = np.cumsum(tic)
+    total = float(cum[-1])
+    if not np.isfinite(total) or total <= 0:
+        return [np.nan] * 4
+    frac = cum / total
+    # RT at which cumulative TIC first reaches each threshold.
+    t1 = float(rts[int(np.argmax(frac >= 0.25))])
+    t2 = float(rts[int(np.argmax(frac >= 0.50))])
+    t3 = float(rts[int(np.argmax(frac >= 0.75))])
+    return [
+        (t1 - rtmin) / duration,
+        (t2 - t1) / duration,
+        (t3 - t2) / duration,
+        (rtmax - t3) / duration,
+    ]
 
 def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]:
     """
@@ -2168,7 +2156,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     rt_quantiles_ms1 = rt_over_ms_quantiles(exp, 1)
     rt_quantiles_ms2 = rt_over_ms_quantiles(exp, 2)
     qareas = area_under_tic_rt_quantiles(exp, 1)
-    tfr = tic_quantile_rt_fraction(exp, 1, relative=True)
+    tfr = tic_quantile_rt_fraction(exp, 1)
 
     def _safe_get(values, index):
         try:
@@ -2235,11 +2223,8 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["TIC_MS1_Area_RTQ3"] = _safe_get(qareas, 2)
     computed["MedianTIC_in_RT_MS1_IQR"] = median_tic_rt_iqr(exp, 1)
     computed["TIC_MS1_MedianInHalfRange"] = median_tic_of_rt_range(exp, 1)
-    computed["RT_TIC_Q0"] = _safe_get(tfr, 0)
-    computed["RT_TIC_Q1"] = _safe_get(tfr, 1)
-    computed["RT_TIC_Q2"] = _safe_get(tfr, 2)
-    computed["RT_TIC_Q3"] = _safe_get(tfr, 3)
-    computed["RT_TIC_Q4"] = _safe_get(tfr, 4)
+    # MS:4000183 emitted as one four-value interval n-tuple.
+    computed["RT_TIC_Quantiles"] = [float(x) for x in tfr]
     computed["TIC_MS1_CV"] = float(np.std(tic_ms1) / np.mean(tic_ms1)) if tic_ms1.size > 1 and np.mean(tic_ms1) else np.nan
     computed["TIC_MS2_CV"] = float(np.std(tic_ms2) / np.mean(tic_ms2)) if tic_ms2.size > 1 and np.mean(tic_ms2) else np.nan
 
@@ -2352,11 +2337,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "TIC_MS1_Area_RTQ3",
         "MedianTIC_in_RT_MS1_IQR",
         "TIC_MS1_MedianInHalfRange",
-        "RT_TIC_Q0",
-        "RT_TIC_Q1",
-        "RT_TIC_Q2",
-        "RT_TIC_Q3",
-        "RT_TIC_Q4",
+        "RT_TIC_Quantiles",
         "TIC_MS1_CV",
         "TIC_MS2_CV",
         "TIC_MS1_SignalJump10x_Count",
@@ -2494,11 +2475,17 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
 
         qmetrics = []
         for k, v in metrics_dict.items():
-            # ensure scalar JSON value
+            # ensure JSON-serialisable value; n-tuples (lists/tuples) are kept as
+            # arrays with non-finite entries mapped to null, not stringified
             if v is None or (isinstance(v, float) and not np.isfinite(v)):
                 val = None
             elif isinstance(v, (int, float, str)):
                 val = v
+            elif isinstance(v, (list, tuple)):
+                val = [
+                    (x if (isinstance(x, (int, str)) or (isinstance(x, float) and np.isfinite(x))) else None)
+                    for x in v
+                ]
             else:
                 val = str(v)
 
