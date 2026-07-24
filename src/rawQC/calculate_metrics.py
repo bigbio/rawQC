@@ -2048,6 +2048,36 @@ def total_peak_count(exp: oms.MSExperiment) -> int:
     """
     return sum(spec.size() for spec in exp)
 
+def max_base_peak_intensity(exp: oms.MSExperiment) -> float:
+    """
+    Maximum base peak intensity across all spectra (MS:4000202).
+
+    MS:4000202:
+    "The maximum base peak intensity of all spectra in a single run." [PSI:MS]
+
+    Every spectrum is considered regardless of MS level (MS1, MS2, MS3, ...),
+    matching the term definition and independent implementations that iterate
+    all spectra. Spectra with no peaks (empty scans) are skipped. If the run
+    contains no non-empty spectra, NaN is returned.
+
+    Args:
+        exp: MSExperiment object
+
+    Returns:
+        float: Maximum base peak intensity across the whole run, or NaN if empty
+    """
+    max_bp = np.nan
+    for spec in exp:
+        if spec.size() == 0:
+            continue
+        _, intens = spec.get_peaks()
+        if intens.size == 0:
+            continue
+        m = float(np.max(intens))
+        if np.isnan(max_bp) or m > max_bp:
+            max_bp = m
+    return max_bp
+
 def chromatogram_peak_count(exp: oms.MSExperiment) -> int:
     """
     Count total number of chromatographic peaks.
@@ -2277,10 +2307,11 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
             _, intens = spec.get_peaks()
             if intens.size > 0:
                 base_peaks_ms2.append(float(np.max(intens)))
-    all_base_peaks = base_peaks_ms1 + base_peaks_ms2
     computed["BasePeak_MS1_Mean"] = float(np.mean(base_peaks_ms1)) if base_peaks_ms1 else np.nan
     computed["BasePeak_MS2_Mean"] = float(np.mean(base_peaks_ms2)) if base_peaks_ms2 else np.nan
-    computed["BasePeak_All_Max"] = float(np.max(all_base_peaks)) if all_base_peaks else np.nan
+    # MS:4000202 is defined over *all* spectra regardless of MS level, so it must
+    # include MS3+ base peaks, not just the MS1/MS2 subsets collected above.
+    computed["BasePeak_All_Max"] = max_base_peak_intensity(exp)
 
     computed["PrecursorMz_MS2_Median"] = median_precursor_mz(exp, 2)
     computed["ExtentPrecursorIntensity_95over5_MS2"] = extent_identified_precursor_intensity(exp, 2)
