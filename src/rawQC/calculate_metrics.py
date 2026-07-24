@@ -1919,7 +1919,7 @@ def avg_ms1_cycle_time(exp: oms.MSExperiment) -> float:
     return float(np.mean(diffs))
 
 
-def fastest_ms_frequency(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def fastest_ms_frequency(exp: oms.MSExperiment, ms_level: int = 1, window: float = 60.0) -> float:
     """
     Fastest frequency for MS level 1 collection (MS:4000065) or MS level 2 collection (MS:4000066).
 
@@ -1929,52 +1929,51 @@ def fastest_ms_frequency(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     MS:4000066:
     "Fastest frequency for MS level 2 collection" [PSI:MS]
 
-    Spectrum acquisition frequency can be used to gauge whether instrument settings
-    are well matched to sample complexity. This metric reports the inverse of the
-    minimum positive time difference between consecutive scans for the requested
-    MS level.
+    The original QuaMeter definition (PMID:24494671) is the *maximum acquisition
+    rate sustained over a one-minute window*, not the inverse of the smallest gap
+    between two scans. Reporting ``1 / min-gap`` lets a single unusually close
+    pair of scans dominate the metric with an arbitrarily high value.
+
+    This implementation reproduces the QuaMeter/macproqc one-minute moving
+    window: for each scan at time ``t`` it counts how many scans fall in the
+    interval ``[t, t + window]`` (inclusive), takes the maximum such count over
+    all scans, and divides by the window length (60 s) to obtain a frequency in
+    hertz. Because any single fast pair adds at most one scan to a window, it
+    cannot dominate the result.
+
+    Behavior for short inputs:
+        * No finite retention times -> NaN.
+        * If the level spans less than ``window`` seconds, the moving window
+          still divides by the full window length, so the reported frequency is
+          ``n_scans / window`` -- a conservative lower bound consistent with the
+          reference implementations (there is no full one-minute window to
+          average over).
 
     Details:
         MS:4000065
         synonym: "MS1-Freq-Max" EXACT [PMID:24494671]
-        relationship: has_metric_category MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000021 ! MS1 metric
         relationship: has_units UO:0000106 ! hertz
-
         MS:4000066
         synonym: "MS2-Freq-Max" EXACT [PMID:24494671]
-        relationship: has_metric_category MS:4000022 ! MS2 metric
-        relationship: has_units UO:0000106 ! hertz
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 1)
+        window: float, moving-window length in seconds (default: 60.0)
 
     Returns:
-        float: Fastest observed acquisition frequency in hertz, or NaN if unavailable
-
-    Example:
-        >>> freq_ms1 = fastest_ms_frequency(exp, ms_level=1)
-        >>> freq_ms2 = fastest_ms_frequency(exp, ms_level=2)
+        float: Fastest sustained acquisition frequency in hertz, or NaN if unavailable
     """
-    specs = sorted(_filter_by_mslevel(exp, ms_level), key=lambda s: s.getRT())
-    if len(specs) < 2:
+    rts = _rts(_filter_by_mslevel(exp, ms_level))
+    rts = rts[np.isfinite(rts)]
+    if rts.size == 0:
         return np.nan
-
-    rts = _rts(specs)
-    if rts.size < 2:
-        return np.nan
-
-    diffs = np.diff(np.sort(rts))
-    diffs = diffs[diffs > 0]
-    if diffs.size == 0:
-        return np.nan
-
-    fastest = float(np.min(diffs))
-    if fastest <= 0:
-        return np.nan
-
-    return float(1.0 / fastest)
+    srt = np.sort(rts)
+    # For each anchor t = srt[i]: count of scans in [t, t + window].
+    hi = np.searchsorted(srt, srt + window, side="right")
+    lo = np.searchsorted(srt, srt, side="left")
+    max_count = int(np.max(hi - lo))
+    return float(max_count / window)
 
 
 def peak_type_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
