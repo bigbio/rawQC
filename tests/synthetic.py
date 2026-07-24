@@ -57,7 +57,7 @@ REFERENCE_SOURCES = {
 }
 
 # Declared minimum supported pyOpenMS version (see pyproject.toml).
-MIN_PYOPENMS = (3, 4, 0)
+MIN_PYOPENMS = (3, 5, 0)
 
 
 def _spectrum(rt, level, mzs, intens, *, prec_mz=None, prec_int=None,
