@@ -82,23 +82,23 @@ METRIC_METADATA = {
         "accession": None,
         "description": "Total number of peaks across all spectra in the run."
     },
-    "NumberOfChromatographicPeaks": {
+    "NumberOfChromatogramDataPoints": {
         "accession": None,
-        "description": "Total number of peaks across all chromatograms."
+        "description": "Total number of data points across all chromatograms (stored array lengths, not resolved chromatographic peaks)."
     },
 
     # FAIMS
     "FAIMS_CV_Count": {
         "accession": None,
-        "description": "Number of different FAIMS compensation voltages used."
+        "description": "Number of distinct FAIMS compensation voltages used."
     },
-    "FAIMS_CV_Min": {
-        "accession": "MS:1001581",
-        "description": "Minimum FAIMS compensation voltage (V)."
+    "FAIMS_CV_Values": {
+        "accession": None,
+        "description": "Sorted distinct FAIMS compensation voltages used, in volts (V), as an n-tuple."
     },
-    "FAIMS_CV_Max": {
-        "accession": "MS:1001581",
-        "description": "Maximum FAIMS compensation voltage (V)."
+    "FAIMS_CV_Range": {
+        "accession": None,
+        "description": "Range [min, max] of FAIMS compensation voltages, in volts (V)."
     },
 
     # Empty scans
@@ -111,38 +111,20 @@ METRIC_METADATA = {
         "description": "Number of MS2 scans where the peaks' intensity sums to 0 (i.e. no peaks or only 0-intensity peaks)."
     },
 
-    # m/z and RT ranges
-    "MzRange_MS1_Min": {
-        "accession": "MS:4000070",
-        "description": "Lower limit of m/z values at which MS1 spectra are recorded."
-    },
-    "MzRange_MS1_Max": {
-        "accession": "MS:4000070",
-        "description": "Upper limit of m/z values at which MS1 spectra are recorded."
-    },
-    "MzRange_MS2_Min": {
-        "accession": "MS:4000070",
-        "description": "Lower limit of m/z precursor values at which MS2 spectra are recorded."
-    },
-    "MzRange_MS2_Max": {
-        "accession": "MS:4000070",
-        "description": "Upper limit of m/z precursor values at which MS2 spectra are recorded."
-    },
-    "RtRange_MS1_Min": {
+    # m/z and RT acquisition ranges (each a two-value [min, max] n-tuple)
+    # MS:4000069 = precursor m/z acquisition range (MSn only);
+    # MS:4000070 = retention-time acquisition range.
+    "MzRange_MS2": {
         "accession": "MS:4000069",
-        "description": "Lower limit of retention time at which MS1 spectra are recorded (seconds)."
+        "description": "Lower and upper limit of precursor m/z values at which MS2 spectra are recorded, as [min, max]."
     },
-    "RtRange_MS1_Max": {
-        "accession": "MS:4000069",
-        "description": "Upper limit of retention time at which MS1 spectra are recorded (seconds)."
+    "RtRange_MS1": {
+        "accession": "MS:4000070",
+        "description": "Lower and upper limit of retention time (seconds) at which MS1 spectra are recorded, as [min, max]."
     },
-    "RtRange_MS2_Min": {
-        "accession": "MS:4000069",
-        "description": "Lower limit of retention time at which MS2 spectra are recorded (seconds)."
-    },
-    "RtRange_MS2_Max": {
-        "accession": "MS:4000069",
-        "description": "Upper limit of retention time at which MS2 spectra are recorded (seconds)."
+    "RtRange_MS2": {
+        "accession": "MS:4000070",
+        "description": "Lower and upper limit of retention time (seconds) at which MS2 spectra are recorded, as [min, max]."
     },
 
     # Fastest acquisition frequency
@@ -155,38 +137,14 @@ METRIC_METADATA = {
         "description": "Fastest observed frequency of MS2 spectrum acquisition (Hz)."
     },
 
-    # RT over MS quantiles
-    "RT_MS1_Q1": {
+    # RT over MS quantiles (four interval fractions as one n-tuple)
+    "RT_MS1_Quantiles": {
         "accession": "MS:4000184",
-        "description": "The interval used for acquisition of the first quantile of all MS1 events divided by retention time duration"
+        "description": "The four RT interval fractions of MS1 events (between the 25/50/75th scan-time percentiles), normalized by the MS1 acquisition duration; sums to 1.0."
     },
-    "RT_MS1_Q2": {
-        "accession": "MS:4000184",
-        "description": "The interval when the second quantile of all MS1 events was acquired, divided by RT duration."
-    },
-    "RT_MS1_Q3": {
-        "accession": "MS:4000184",
-        "description": "The interval when the third quantile of all MS1 events was acquired, divided by RT duration."
-    },
-    "RT_MS1_Q4": {
-        "accession": "MS:4000184",
-        "description": "The interval when the fourth quantile of all MS1 events was acquired, divided by RT duration."
-    },
-    "RT_MS2_Q1": {
+    "RT_MS2_Quantiles": {
         "accession": "MS:4000185",
-        "description": "The interval when the first quantile of all MS2 events was acquired, divided by RT duration."
-    },
-    "RT_MS2_Q2": {
-        "accession": "MS:4000185",
-        "description": "The interval when the second quantile of all MS2 events was acquired, divided by RT duration."
-    },
-    "RT_MS2_Q3": {
-        "accession": "MS:4000185",
-        "description": "The interval when the third quantile of all MS2 events was acquired, divided by RT duration."
-    },
-    "RT_MS2_Q4": {
-        "accession": "MS:4000185",
-        "description": "The interval when the fourth quantile of all MS2 events was acquired, divided by RT duration."
+        "description": "The four RT interval fractions of MS2 events (between the 25/50/75th scan-time percentiles), normalized by the MS2 acquisition duration; sums to 1.0."
     },
 
     # TIC quartile ratios
@@ -215,26 +173,10 @@ METRIC_METADATA = {
         "description": "Log ratio of MS1 TIC Q4 to Q3."
     },
 
-    # TIC quantile RT fractions
-    "RT_TIC_Q0": {
+    # TIC accumulation RT quantiles (four interval fractions as one n-tuple)
+    "RT_TIC_Quantiles": {
         "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 0% of total TIC."
-    },
-    "RT_TIC_Q1": {
-        "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 25% of total TIC."
-    },
-    "RT_TIC_Q2": {
-        "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 50% of total TIC."
-    },
-    "RT_TIC_Q3": {
-        "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 75% of total TIC."
-    },
-    "RT_TIC_Q4": {
-        "accession": "MS:4000183",
-        "description": "The relative RT when the cumulative TIC first exceeds 100% of total TIC."
+        "description": "The four RT interval fractions between the retention times at which the cumulative MS1 TIC reaches 25/50/75% of the total, normalized by the MS1 acquisition duration; sums to 1.0."
     },
 
     # Charge metrics
@@ -262,30 +204,10 @@ METRIC_METADATA = {
         "accession": None,
         "description": "The ratio of 4+ over 2+ MS2 precursor charge count."
     },
-    # MS2 precursor charge fractions
-    "MS2-PrecZ-1": {
+    # MS2 precursor charge fractions (one table, denominator = all MS2 scans)
+    "MS2_PrecursorCharge_Fractions": {
         "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 1+.",
-    },
-    "MS2-PrecZ-2": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 2+.",
-    },
-    "MS2-PrecZ-3": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 3+.",
-    },
-    "MS2-PrecZ-4": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 4+.",
-    },
-    "MS2-PrecZ-5": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 5+.",
-    },
-    "MS2-PrecZ-more": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 5+ or higher.",
+        "description": "Fraction of MS2 precursors per charge state (1, 2, 3, 4, 5, >=6, and unknown/missing) as a table with charge_state, count and fraction columns; fractions are over all MS2 scans and sum to 1.0.",
     },
 
     # Custom metrics (non-PSI:MS)
@@ -311,11 +233,11 @@ METRIC_METADATA = {
     },
     "ScanRate_MS1": {
         "accession": None,
-        "description": "MS1 scan rate (scans per minute)."
+        "description": "MS1 scan rate (scans per minute) over the MS1 acquisition span."
     },
     "ScanRate_MS2": {
         "accession": None,
-        "description": "MS2 scan rate (scans per minute)."
+        "description": "MS2 scan rate (scans per minute) over the MS2 acquisition span."
     },
     "MS1_to_MS2_Ratio": {
         "accession": None,
@@ -353,6 +275,10 @@ METRIC_METADATA = {
         "accession": None,
         "description": "Standard deviation of MS2 precursor intensities."
     },
+    "PrecursorIntensity_FallbackCount": {
+        "accession": None,
+        "description": "Number of MS2 precursors whose zero/unrecorded intensity was replaced by the spectrum MS2 TIC (QuaMeter fallback)."
+    },
 
     # Median precursor m/z
     "PrecursorMz_MS2_Median": {
@@ -371,21 +297,13 @@ METRIC_METADATA = {
     },
 
     # Area under TIC
-    "TIC_MS1_Area_RTQ1": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the first RT quartile (0-25%)."
-    },
-    "TIC_MS1_Area_RTQ2": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the second RT quartile (25-50%)."
-    },
-    "TIC_MS1_Area_RTQ3": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the third RT quartile (50-75%)."
+    "TIC_MS1_Area_RTQuantiles": {
+        "accession": "MS:4000156",
+        "description": "Area under the MS1 TIC for the four retention-time quartiles (0-25%, 25-50%, 50-75%, 75-100%) as one n-tuple."
     },
     "TIC_MS1_Area": {
         "accession": "MS:4000029",
-        "description": "Sum of all MS1 TIC values (area under the total ion chromatogram)."
+        "description": "Time integral of the MS1 TIC over retention time (area under the total ion chromatogram; intensity x second)."
     },
 
     # Extent of precursor intensity
@@ -410,26 +328,27 @@ METRIC_METADATA = {
         "description": "The number of distinct MS levels present in the run (e.g., MS1, MS2, MS3)."
     },
 
-    # Polarity statistics
+    # Polarity statistics (custom counts). MS:1000129/MS:1000130 are scan-polarity
+    # CV terms, not QC metrics, so they are NOT used as accessions for counts.
     "Polarity_MS1_positive": {
-        "accession": "MS:1000130",
-        "description": "Number of MS1 spectra acquired in positive polarity mode."
+        "accession": None,
+        "description": "Number of MS1 spectra acquired in positive polarity mode (scan polarity MS:1000130)."
     },
     "Polarity_MS1_negative": {
-        "accession": "MS:1000129",
-        "description": "Number of MS1 spectra acquired in negative polarity mode."
+        "accession": None,
+        "description": "Number of MS1 spectra acquired in negative polarity mode (scan polarity MS:1000129)."
     },
     "Polarity_MS1_unknown": {
         "accession": None,
         "description": "Number of MS1 spectra with unknown polarity."
     },
     "Polarity_MS2_positive": {
-        "accession": "MS:1000130",
-        "description": "Number of MS2 spectra acquired in positive polarity mode."
+        "accession": None,
+        "description": "Number of MS2 spectra acquired in positive polarity mode (scan polarity MS:1000130)."
     },
     "Polarity_MS2_negative": {
-        "accession": "MS:1000129",
-        "description": "Number of MS2 spectra acquired in negative polarity mode."
+        "accession": None,
+        "description": "Number of MS2 spectra acquired in negative polarity mode (scan polarity MS:1000129)."
     },
     "Polarity_MS2_unknown": {
         "accession": None,
@@ -459,17 +378,17 @@ METRIC_METADATA = {
         "accession": None,
         "description": "Number of Selected Reaction Monitoring (SRM) chromatograms."
     },
-    "Chromatograms_MRM": {
-        "accession": None,
-        "description": "Number of Multiple Reaction Monitoring (MRM) chromatograms."
-    },
-    "Chromatograms_XIC": {
-        "accession": None,
-        "description": "Number of Extracted Ion Chromatograms (XIC)."
-    },
     "Chromatograms_SIM": {
         "accession": None,
         "description": "Number of Selected Ion Monitoring (SIM) chromatograms."
+    },
+    "Chromatograms_XIC": {
+        "accession": None,
+        "description": "Number of extracted-ion / mass chromatograms (XIC)."
+    },
+    "Chromatograms_SIC": {
+        "accession": None,
+        "description": "Number of Selected Ion Current (SIC) chromatograms."
     },
     "Chromatograms_Unknown": {
         "accession": None,
@@ -484,52 +403,59 @@ METRIC_METADATA = {
         "description": "Maximum retention time covered by chromatograms (seconds)."
     },
 
-    # Peak type statistics
+    # Peak type statistics (aggregated over all spectra of the level)
     "MS1_PeakType_Annotated": {
         "accession": None,
-        "description": "Peak type from metadata for MS1 (centroid, profile, or unknown)."
+        "description": "Metadata peak type for MS1 aggregated over the run (centroid, profile, mixed, or unknown)."
+    },
+    "MS1_PeakType_Annotated_ProfileFraction": {
+        "accession": None,
+        "description": "Fraction of type-resolved MS1 spectra annotated as profile."
     },
     "MS1_PeakType_Estimated": {
         "accession": None,
-        "description": "Peak type estimated from peak spacing for MS1 (centroid, profile, or unknown)."
+        "description": "Peak type estimated from peak spacing for MS1 aggregated over the run (centroid, profile, mixed, or unknown)."
+    },
+    "MS1_PeakType_Estimated_ProfileFraction": {
+        "accession": None,
+        "description": "Fraction of estimatable MS1 spectra estimated as profile."
     },
     "MS2_PeakType_Annotated": {
         "accession": None,
-        "description": "Peak type from metadata for MS2 (centroid, profile, or unknown)."
+        "description": "Metadata peak type for MS2 aggregated over the run (centroid, profile, mixed, or unknown)."
+    },
+    "MS2_PeakType_Annotated_ProfileFraction": {
+        "accession": None,
+        "description": "Fraction of type-resolved MS2 spectra annotated as profile."
     },
     "MS2_PeakType_Estimated": {
         "accession": None,
-        "description": "Peak type estimated from peak spacing for MS2 (centroid, profile, or unknown)."
+        "description": "Peak type estimated from peak spacing for MS2 aggregated over the run (centroid, profile, mixed, or unknown)."
+    },
+    "MS2_PeakType_Estimated_ProfileFraction": {
+        "accession": None,
+        "description": "Fraction of estimatable MS2 spectra estimated as profile."
     },
 
-    # Mass analyzer information
-    "MassAnalyzer_0_Type": {
+    # Mass analyzer information (one table, arbitrary number of analyzers)
+    "MassAnalyzers": {
         "accession": None,
-        "description": "Type of the first mass analyzer (e.g., FTICR, Orbitrap, TOF, IT, Q)."
+        "description": "Mass analyzers of the instrument as a table with index, type (e.g. ORBITRAP, TOF, IT, QUADRUPOLE), and resolution columns."
     },
-    "MassAnalyzer_0_Resolution": {
+
+    # Activation methods (one table, arbitrary number of methods/levels)
+    "ActivationMethods": {
         "accession": None,
-        "description": "Resolution of the first mass analyzer."
-    },
-    "MassAnalyzer_1_Type": {
-        "accession": None,
-        "description": "Type of the second mass analyzer (if present)."
-    },
-    "MassAnalyzer_1_Resolution": {
-        "accession": None,
-        "description": "Resolution of the second mass analyzer (if present)."
+        "description": "Precursor activation methods observed as a table with ms_level, method (e.g. HCD, CID, ETD), and count columns."
     },
 
 
-    # Metrics lacking PSI:MS descriptions
     "TIC_MS2_Area": {
         "accession": "MS:4000030",
-        "description": "Sum of all MS2 TIC values (area under the total ion chromatogram)."
+        "description": "Time integral of the MS2 TIC over retention time (area under the total ion chromatogram; intensity x second)."
     },
-    "MS_Run_Duration": {
-        "accession": "MS:4000067",
-        "description": None
-    },
+    # NOTE: MS_Run_Duration (MS:4000067) was registered here but never computed
+    # (a dead entry with a null description); removed in issue #44.
 }
 
 # Derived metadata lookups for convenience and validation
@@ -538,6 +464,142 @@ METRIC_ACCESSIONS = {k: v["accession"] for k, v in METRIC_METADATA.items() if v[
 METRIC_DESCRIPTIONS = {k: v["description"] for k, v in METRIC_METADATA.items() if v["description"] is not None}
 MISSING_METRIC_ACCESSIONS = [k for k, v in METRIC_METADATA.items() if v["accession"] is None]
 MISSING_METRIC_DESCRIPTIONS = [k for k, v in METRIC_METADATA.items() if v["description"] is None]
+
+# Authoritative presentation order for the static metrics. Dynamic metric
+# families (chromatogram types, activation methods, analyzers, peak types, FAIMS)
+# are appended in computation order after these. Kept as a single source of truth
+# so ordering and metadata cannot drift apart (see validate_metric_registry).
+METRIC_ORDER = [
+    "NumberOfMSLevels",
+    "NumberOfSpectra_MS1",
+    "NumberOfSpectra_MS2",
+    "MS1_to_MS2_Ratio",
+    "ChromatographyDuration",
+    "NumberOfChromatograms",
+    "NumberOfChromatogramDataPoints",
+    "NumberOfSpectralPeaks",
+    "Polarity_MS1_unknown",
+    "Polarity_MS2_unknown",
+    "ScanRate_MS1",
+    "ScanRate_MS2",
+    "FastestFrequency_MS1",
+    "FastestFrequency_MS2",
+    "AvgCycleTime_MS1",
+    "EmptyScans_MS1",
+    "EmptyScans_MS2",
+    "MzRange_MS2",
+    "RtRange_MS1",
+    "RtRange_MS2",
+    "RT_MS1_Quantiles",
+    "RT_MS2_Quantiles",
+    "RT_MS1_IQR",
+    "RT_MS1_IQRRate",
+    "TIC_MS1_Area",
+    "TIC_MS2_Area",
+    "TIC_MS1_Area_RTQuantiles",
+    "MedianTIC_in_RT_MS1_IQR",
+    "TIC_MS1_MedianInHalfRange",
+    "RT_TIC_Quantiles",
+    "TIC_MS1_CV",
+    "TIC_MS2_CV",
+    "TIC_MS1_SignalJump10x_Count",
+    "TIC_MS1_SignalFall10x_Count",
+    "TIC_MS1_Change_Q2",
+    "TIC_MS1_Change_Q3",
+    "TIC_MS1_Change_Q4",
+    "TIC_MS1_Ratio_Q2",
+    "TIC_MS1_Ratio_Q3",
+    "TIC_MS1_Ratio_Q4",
+    "PeakDensity_MS1_Q1",
+    "PeakDensity_MS1_Q2",
+    "PeakDensity_MS1_Q3",
+    "PeakDensity_MS2_Q1",
+    "PeakDensity_MS2_Q2",
+    "PeakDensity_MS2_Q3",
+    "MS1_PeakType_Annotated",
+    "MS1_PeakType_Annotated_ProfileFraction",
+    "MS1_PeakType_Estimated",
+    "MS1_PeakType_Estimated_ProfileFraction",
+    "MS2_PeakType_Annotated",
+    "MS2_PeakType_Annotated_ProfileFraction",
+    "MS2_PeakType_Estimated",
+    "MS2_PeakType_Estimated_ProfileFraction",
+    "BasePeak_MS1_Mean",
+    "BasePeak_MS2_Mean",
+    "BasePeak_All_Max",
+    "PrecursorMz_MS2_Median",
+    "ChargeMin",
+    "ChargeMax",
+    "ChargeMean",
+    "ChargeMedian",
+    "ChargeRatio_3over2",
+    "ChargeRatio_4over2",
+    "MS2_PrecursorCharge_Fractions",
+    "PrecursorIntensity_Q1",
+    "PrecursorIntensity_Q2",
+    "PrecursorIntensity_Q3",
+    "PrecursorIntensity_Mean",
+    "PrecursorIntensity_Sd",
+    "PrecursorIntensity_FallbackCount",
+    "ExtentPrecursorIntensity_95over5_MS2",
+    "MassAnalyzers",
+    "ActivationMethods",
+    "FAIMS_CV_Count",
+    "FAIMS_CV_Values",
+    "FAIMS_CV_Range",
+    "Chromatograms_RT_Min",
+    "Chromatograms_RT_Max",
+]
+
+import re as _re_spec
+
+# Dynamic metric families: keys generated at runtime (one per chromatogram type,
+# activation method, mass analyzer, MS level, FAIMS field) rather than enumerated
+# statically. A computed key that matches one of these patterns is considered
+# covered by the specification even though it is not a fixed METRIC_METADATA key.
+_DYNAMIC_METRIC_PATTERNS = [
+    _re_spec.compile(r"^Chromatograms_[A-Za-z0-9 ]+$"),
+    _re_spec.compile(r"^MS\d+_ActivationMethod_.+$"),
+    _re_spec.compile(r"^MassAnalyzer_\d+_(Type|Resolution)$"),
+    _re_spec.compile(r"^MS\d+_PeakType_.+$"),
+    _re_spec.compile(r"^FAIMS_CV_.+$"),
+]
+
+
+def _is_dynamic_metric(name: str) -> bool:
+    return any(p.match(name) for p in _DYNAMIC_METRIC_PATTERNS)
+
+
+def validate_metric_registry(computed: Dict[str, Any]) -> Dict[str, List[str]]:
+    """
+    Validate a computed metric dict against the authoritative specification.
+
+    Returns a dict of problem categories to offending metric names:
+      * "uncovered": computed keys with neither a METRIC_METADATA entry nor a
+        matching dynamic-family pattern (a computed metric lacking metadata);
+      * "ordered_missing_metadata": METRIC_ORDER entries without a metadata entry;
+      * "ordered_not_computed": METRIC_ORDER entries the run did not produce.
+        METRIC_ORDER holds only static metrics, so a dynamic-looking stale entry
+        (e.g. a reintroduced "MS2_ActivationMethod_0") is flagged here too;
+      * "registered_orphans": metadata entries that are neither computed nor part
+        of a dynamic family -- dead registrations such as the former
+        MS_Run_Duration (registered but never produced).
+
+    A test can assert every category is empty to catch registry/order/computation
+    drift.
+    """
+    uncovered = [k for k in computed
+                 if k not in METRIC_METADATA and not _is_dynamic_metric(k)]
+    ordered_missing_metadata = [k for k in METRIC_ORDER if k not in METRIC_METADATA]
+    ordered_not_computed = [k for k in METRIC_ORDER if k not in computed]
+    registered_orphans = [k for k in METRIC_METADATA
+                          if k not in computed and not _is_dynamic_metric(k)]
+    return {
+        "uncovered": uncovered,
+        "ordered_missing_metadata": ordered_missing_metadata,
+        "ordered_not_computed": ordered_not_computed,
+        "registered_orphans": registered_orphans,
+    }
 
 
 # -------------------------------------------------------------------------
@@ -555,6 +617,30 @@ def _filter_by_mslevel(exp: oms.MSExperiment, level: int) -> List[oms.MSSpectrum
         list: Spectra matching the specified MS level
     """
     return [s for s in exp if s.getMSLevel() == level]
+
+def _select_spectra(exp: oms.MSExperiment, level: int,
+                    accepted_native_ids: Optional[set] = None) -> List[oms.MSSpectrum]:
+    """
+    Filter spectra by MS level and, optionally, by accepted identifications.
+
+    When ``accepted_native_ids`` is None the result is every spectrum of the MS
+    level (the ID-free proxy). When a set of accepted spectrum native IDs is
+    supplied, only those spectra are kept, which realizes the ID-based PSI-MS
+    definition ("after user-defined acceptance criteria are applied").
+
+    Args:
+        exp: MSExperiment object
+        level: MS level to keep
+        accepted_native_ids: optional set of accepted spectrum native IDs
+
+    Returns:
+        list: selected spectra
+    """
+    specs = _filter_by_mslevel(exp, level)
+    if accepted_native_ids is not None:
+        wanted = set(accepted_native_ids)
+        specs = [s for s in specs if s.getNativeID() in wanted]
+    return specs
 
 def _rts(specs: List[oms.MSSpectrum]) -> np.ndarray:
     """
@@ -631,9 +717,55 @@ def _precursor_values(specs: List[oms.MSSpectrum]) -> Tuple[np.ndarray, np.ndarr
             continue
         p = precs[0]
         mzs.append(float(p.getMZ()) if p.getMZ() else np.nan)
-        intens.append(float(p.getIntensity()) if p.getIntensity() else np.nan)
+        # A present precursor keeps its recorded intensity, including a legitimate
+        # 0.0 (truthiness would silently turn 0.0 into NaN and drop it). Only an
+        # absent precursor (handled above) yields NaN.
+        intens.append(float(p.getIntensity()))
         charges.append(int(p.getCharge()) if p.getCharge() else np.nan)
     return np.array(mzs, dtype=float), np.array(intens, dtype=float), np.array(charges, dtype=float)
+
+
+def precursor_intensities(specs: List[oms.MSSpectrum],
+                          fallback_to_ms2_tic: bool = True) -> Tuple[np.ndarray, int, int]:
+    """
+    Extract MSn precursor intensities with an explicit zero/missing policy.
+
+    QuaMeter detects a zero or unrecorded precursor intensity and falls back to
+    the corresponding MSn (MS2) total ion current, so a recorded 0.0 is not
+    silently dropped. rawQC follows that convention by default:
+
+      * spectrum with no precursor      -> NaN (counted as ``n_missing``)
+      * precursor intensity <= 0        -> the spectrum's TIC (counted as
+                                           ``n_fallback``) when
+                                           ``fallback_to_ms2_tic`` is True,
+                                           otherwise the value 0.0 is preserved
+      * precursor intensity  > 0        -> that intensity
+
+    Args:
+        specs: list of MSSpectrum objects (typically MS2)
+        fallback_to_ms2_tic: apply the QuaMeter MS2-TIC fallback (default True)
+
+    Returns:
+        tuple: (intensities, n_fallback, n_missing)
+    """
+    vals: List[float] = []
+    n_fallback = 0
+    n_missing = 0
+    for sp in specs:
+        precs = sp.getPrecursors()
+        if not precs:
+            vals.append(np.nan)
+            n_missing += 1
+            continue
+        inten = float(precs[0].getIntensity())
+        if inten <= 0.0:
+            if fallback_to_ms2_tic:
+                inten = float(sp.calculateTIC())
+                n_fallback += 1
+            else:
+                inten = 0.0
+        vals.append(inten)
+    return np.array(vals, dtype=float), n_fallback, n_missing
 
 def _iqr(arr: Union[np.ndarray, List[float]]) -> float:
     """
@@ -653,6 +785,11 @@ def _iqr(arr: Union[np.ndarray, List[float]]) -> float:
     q75, q25 = np.percentile(arr, [75, 25])
     return float(q75 - q25)
 
+def _trapz(y: np.ndarray, x: np.ndarray) -> float:
+    """Trapezoidal integral of y over x (numpy 1.x/2.x compatible)."""
+    fn = getattr(np, "trapezoid", None) or np.trapz
+    return float(fn(y, x))
+
 def _nanmedian(arr: Union[np.ndarray, List[float]]) -> float:
     """
     Calculate median with NaN removal.
@@ -670,6 +807,54 @@ def _nanmedian(arr: Union[np.ndarray, List[float]]) -> float:
 # -------------------------------------------------------------------------
 # Helper functions for polarity and chromatogram analysis
 # -------------------------------------------------------------------------
+def _enum_int(member: Any) -> int:
+    """Integer value of a pyOpenMS enum member, across binding generations.
+
+    pyOpenMS <= 3.5 exposes enum members as plain ints (``int(member)`` works);
+    pyOpenMS 3.6 switched to Python ``enum.Enum`` objects whose integer is on
+    ``.value`` and for which ``int(member)`` raises ``TypeError``. Handle both.
+    """
+    try:
+        return int(member)
+    except (TypeError, ValueError):
+        return int(member.value)
+
+
+def _enum_name_map(enum_cls: Any) -> Dict[int, str]:
+    """Build an ``int -> member-name`` mapping for a pyOpenMS enum class.
+
+    pyOpenMS 3.4/3.5 removed the ``*ToString`` binding helpers that older code
+    relied on (``IonSource.polarityToString`` etc.), so conversions are
+    reconstructed from the enum members exposed as class attributes. This works
+    regardless of whether members are ints (<= 3.5) or Enum objects (3.6).
+    """
+    mapping: Dict[int, str] = {}
+    for member in dir(enum_cls):
+        # Skip dunders, the getMapping helper, and the SIZE_OF sentinel. Do NOT
+        # filter on isupper(): some members are legitimately mixed-case (e.g. the
+        # activation methods ETciD/EThcD) and must not be dropped to "unknown".
+        if member.startswith("_") or member == "getMapping" or "SIZE_OF" in member:
+            continue
+        try:
+            mapping[_enum_int(getattr(enum_cls, member))] = member
+        except (TypeError, ValueError, AttributeError):
+            continue
+    return mapping
+
+
+# Reverse enum maps computed once at import time.
+_POLARITY_NAMES = {
+    _enum_int(oms.IonSource.Polarity.POSITIVE): "positive",
+    _enum_int(oms.IonSource.Polarity.NEGATIVE): "negative",
+}
+_SPECTRUM_TYPE_NAMES = {
+    _enum_int(oms.SpectrumSettings.SpectrumType.CENTROID): "centroid",
+    _enum_int(oms.SpectrumSettings.SpectrumType.PROFILE): "profile",
+}
+_ACTIVATION_METHOD_NAMES = _enum_name_map(oms.Precursor.ActivationMethod)
+_ANALYZER_TYPE_NAMES = _enum_name_map(oms.MassAnalyzer.AnalyzerType)
+
+
 def _polarity_to_str(pol: Any) -> str:
     """
     Convert InstrumentSettings.Polarity enum to string.
@@ -680,7 +865,50 @@ def _polarity_to_str(pol: Any) -> str:
     Returns:
         str: "positive", "negative", or "unknown"
     """
-    return oms.IonSource().polarityToString(pol)
+    return _POLARITY_NAMES.get(_enum_int(pol), "unknown")
+
+
+def _spectrum_type_to_str(spectrum_type: Any) -> str:
+    """Convert a ``SpectrumSettings.SpectrumType`` enum value to a string.
+
+    Returns "centroid", "profile", or "unknown".
+    """
+    return _SPECTRUM_TYPE_NAMES.get(_enum_int(spectrum_type), "unknown")
+
+
+def _activation_method_to_str(method: Any) -> str:
+    """Convert a ``Precursor.ActivationMethod`` enum value to its short name."""
+    return _ACTIVATION_METHOD_NAMES.get(_enum_int(method), "unknown")
+
+
+def _analyzer_type_to_str(analyzer_type: Any) -> str:
+    """Convert a ``MassAnalyzer.AnalyzerType`` enum value to its name."""
+    return _ANALYZER_TYPE_NAMES.get(_enum_int(analyzer_type), "unknown")
+
+
+def _faims_compensation_voltages(exp: oms.MSExperiment) -> List[float]:
+    """Collect distinct FAIMS compensation voltages present in the run.
+
+    Reimplements OpenMS' ``FAIMSHelper::getCompensationVoltages`` (not bound in
+    pyOpenMS 3.4/3.5). OpenMS' mzML reader stores a FAIMS compensation voltage
+    (``MS:1001581``) as the spectrum *drift time* with unit
+    ``FAIMS_COMPENSATION_VOLTAGE`` (see OpenMS MzMLHandler and FAIMSHelper), NOT
+    as a metavalue -- so the CV is ``getDriftTime()`` for every spectrum whose
+    ``getDriftTimeUnit()`` is that FAIMS unit. This matches the native
+    FAIMSHelper exactly on 3.6.
+    """
+    faims_unit = _enum_int(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
+    voltages = set()
+    for spec in exp:
+        try:
+            if _enum_int(spec.getDriftTimeUnit()) != faims_unit:
+                continue
+            dt = float(spec.getDriftTime())
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if np.isfinite(dt):
+            voltages.add(dt)
+    return sorted(voltages)
 
 def _extract_spectrum_polarity(spec: oms.MSSpectrum) -> str:
     """
@@ -735,76 +963,68 @@ def chromatography_duration(exp: oms.MSExperiment) -> float:
         >>> duration = chromatography_duration(exp)
     """
     rts_all = _rts(list(exp))
+    # Filter non-finite retention times: a single NaN/inf RT would otherwise make
+    # the duration (and every metric derived from it) non-finite. This matches
+    # the docstring and MsQuality's na.rm=TRUE behavior.
+    rts_all = rts_all[np.isfinite(rts_all)]
     return float(np.max(rts_all) - np.min(rts_all)) if rts_all.size else np.nan
 
 def rt_over_ms_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> List[float]:
     """
-    MS1 quantile RT fraction (MS:4000055) or MS2 quantile RT fraction (MS:4000056).
+    MS1 quantile RT fraction (MS:4000184) or MS2 quantile RT fraction (MS:4000185).
 
-    MS:4000055:
-    "The interval used for acquisition of the first, second, third, and fourth
-    quantile of all MS1 events divided by retention time duration." [PSI:MS]
+    Normative contract (issue #28): the current PSI-MS terms MS:4000184/MS:4000185
+    describe an n-tuple of four RT *interval* widths, matching the original
+    QuaMeter "RT-MS-Q1..Q4" metrics. rawQC reproduces the QuaMeter definition:
 
-    MS:4000056:
-    "The interval used for acquisition of the first, second, third, and fourth
-    quantile of all MS2 events divided by retention time duration." [PSI:MS]
+        Q1 = 25th percentile of the level's scan retention times
+        Q2 = 50th percentile
+        Q3 = 75th percentile
+        interval_1 = (Q1 - RTmin) / duration
+        interval_2 = (Q2 - Q1)  / duration
+        interval_3 = (Q3 - Q2)  / duration
+        interval_4 = (RTmax - Q3) / duration
 
-    The metric is calculated as follows:
-    (1) The retention time duration of the whole experiment is determined
-        (taking into account all MS levels),
-    (2) The spectra are filtered according to the MS level and subsequently
-        ordered according to retention time,
-    (3) The MS events are split into four (approximately) equal parts,
-    (4) The relative retention time is calculated (using the retention time
-        duration from (1) and taking into account the minimum retention time),
-    (5) The relative retention time values associated to the MS event parts
-        are returned.
+    where ``duration`` is the acquisition span of *this MS level* (RTmax - RTmin
+    of the level), not the whole experiment. The four intervals sum to 1.0.
+
+    This replaces the previous behavior, which returned four cumulative RT
+    endpoints, normalized by the whole-experiment duration, using an index
+    partition that did not match any reference. (The obsolete MS:4000055/056
+    accessions were also cited in the old docstring.) If exact MsQuality
+    cumulative-endpoint compatibility is needed, it should be exposed as a
+    separately named custom metric.
 
     Details:
-        MS:4000055
-        synonym: "RT-MS-Q1" RELATED [PMID:24494671]
-        is_a: MS:4000004 ! n-tuple
-        relationship: has_metric_category MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000016 ! retention time metric
-        relationship: has_metric_category MS:4000021 ! MS1 metric
-
-        MS:4000056
-        synonym: "RT-MSMS-Q1" RELATED [PMID:24494671]
-        relationship: has_metric_category MS:4000022 ! MS2 metric
-
-    Note:
-        chromatographyDuration considers the total runtime (including MS1 and MS2 scans).
-        Returns [NaN, NaN, NaN, NaN] if filtered spectra has less than 4 scan events.
+        MS:4000184  synonym: "RT-MS-Q1" RELATED [PMID:24494671]  is_a: n-tuple
+        MS:4000185  synonym: "RT-MSMS-Q1" RELATED [PMID:24494671]
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 1)
 
     Returns:
-        list: Four float values representing RT fractions for each quantile
+        list: four RT interval fractions (summing to 1.0), or [NaN]*4
 
     Example:
         >>> quantiles_ms1 = rt_over_ms_quantiles(exp, ms_level=1)
-        >>> quantiles_ms2 = rt_over_ms_quantiles(exp, ms_level=2)
     """
-    specs = _filter_by_mslevel(exp, ms_level)
-    if len(specs) < 4:
-        return [np.nan]*4
-    specs = sorted(specs, key=lambda s: s.getRT())
-    rts = _rts(specs)
-    total = chromatography_duration(exp)
-    if not np.isfinite(total) or total == 0:
-        return [np.nan]*4
+    rts = _rts(_filter_by_mslevel(exp, ms_level))
+    rts = rts[np.isfinite(rts)]
+    if rts.size < 2:
+        return [np.nan] * 4
     rtmin = float(np.min(rts))
-    # Equal quartile slices by index; fallback to quantile positions if needed
-    ind = np.repeat(np.arange(1,5), repeats=int(np.ceil(len(specs)/4)))[:len(specs)]
-    edges = np.where(np.diff(ind, prepend=ind[0]) != 0)[0] - 1
-    edges = (edges[1:].tolist() + [len(specs)-1]) if len(specs) >= 4 else [len(specs)-1]
-    if len(edges) != 4:
-        qpos = (np.array([0.25, 0.50, 0.75, 1.00]) * (len(specs)-1)).round().astype(int)
-        edges = qpos.tolist()
-    rel = (rts[edges] - rtmin) / total
-    return [float(x) for x in rel]
+    rtmax = float(np.max(rts))
+    duration = rtmax - rtmin
+    if duration <= 0:
+        return [np.nan] * 4
+    q1, q2, q3 = np.percentile(rts, [25, 50, 75])
+    return [
+        float((q1 - rtmin) / duration),
+        float((q2 - q1) / duration),
+        float((q3 - q2) / duration),
+        float((rtmax - q3) / duration),
+    ]
 
 def tic_quartile_to_quartile_log_ratio(exp: oms.MSExperiment, ms_level: int = 1, mode: str = "TIC", relative_to: str = "previous") -> List[float]:
     """
@@ -820,6 +1040,14 @@ def tic_quartile_to_quartile_log_ratio(exp: oms.MSExperiment, ms_level: int = 1,
         list: Three float values representing log ratios [Q2/Q1, Q3/Q2, Q4/Q3]
               or [Q2/Q1, Q3/Q1, Q4/Q1] depending on relative_to parameter
 
+    Note:
+        For ``mode="TIC_change"`` (MS:4000186) the scan-to-scan changes are taken
+        as *absolute* differences. The PSI-MS term explicitly calls the triplet
+        "the original QuaMeter metrics", and QuaMeter computes the change with
+        ``fabs``. Using signed ``diff`` (as MsQuality does) can yield negative
+        quartiles whose ratios/logs are undefined (NaN); the absolute-change
+        definition keeps every quartile non-negative and QuaMeter-compatible.
+
     Example:
         >>> ratios_change = tic_quartile_to_quartile_log_ratio(exp, mode="TIC_change")
         >>> ratios_tic = tic_quartile_to_quartile_log_ratio(exp, mode="TIC")
@@ -830,7 +1058,9 @@ def tic_quartile_to_quartile_log_ratio(exp: oms.MSExperiment, ms_level: int = 1,
     tic = _ion_counts(specs)
     if mode == "TIC_change":
         if tic.size < 2: return [np.nan, np.nan, np.nan]
-        tic = np.diff(tic)
+        # Absolute scan-to-scan change, matching the original QuaMeter fabs()
+        # definition referenced by MS:4000186 (see Note above).
+        tic = np.abs(np.diff(tic))
     qs = np.quantile(tic, [0, 0.25, 0.50, 0.75, 1.0])
     q1, q2, q3, q4 = qs[1], qs[2], qs[3], qs[4]
     with np.errstate(divide='ignore', invalid='ignore'):
@@ -840,6 +1070,35 @@ def tic_quartile_to_quartile_log_ratio(exp: oms.MSExperiment, ms_level: int = 1,
             ratios = np.array([q2/q1, q3/q2, q4/q3], dtype=float)
         logs = np.log(ratios)
     return [float(x) if np.isfinite(x) else np.nan for x in logs]
+
+def scan_rate(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+    """
+    Level-specific scan rate in scans per minute.
+
+    The denominator is the acquisition span of the requested MS level itself
+    (max minus min finite retention time for that level), not one combined
+    MS1/MS2 run duration. Using the combined duration misreports a level's rate
+    when one level starts later or ends earlier than the other.
+
+    Non-finite retention times are removed. Returns NaN when the level has fewer
+    than two finite retention times or a zero-length span (rate undefined).
+
+    Args:
+        exp: MSExperiment object
+        ms_level: int, MS level to analyze (default: 1)
+
+    Returns:
+        float: scans per minute over that MS level's acquisition span, or NaN
+    """
+    rts = _rts(_filter_by_mslevel(exp, ms_level))
+    rts = rts[np.isfinite(rts)]
+    if rts.size < 2:
+        return np.nan
+    span_min = (float(np.max(rts)) - float(np.min(rts))) / 60.0
+    if span_min <= 0:
+        return np.nan
+    return float(rts.size / span_min)
+
 
 def number_spectra(exp: oms.MSExperiment, ms_level: int = 1) -> int:
     """
@@ -933,6 +1192,11 @@ def peak_density_quantiles(exp: oms.MSExperiment, ms_level: int = 1,
         >>> q_ms2 = peak_density_quantiles(exp, ms_level=2)
     """
     specs = sorted(_filter_by_mslevel(exp, ms_level), key=lambda s: s.getRT())
+    # QuaMeter (the origin of MS:4000061/MS:4000062) skips spectra with
+    # defaultArrayLength == 0 before accumulating peak counts, so zero-length
+    # scans must not enter the density distribution as artificial 0-peak scans.
+    # Empty scans are reported separately by MS:4000099/MS:4000100.
+    specs = [s for s in specs if s.size() > 0]
     if not specs:
         return [np.nan for _ in probs]
 
@@ -964,6 +1228,11 @@ def mz_acquisition_range(exp: oms.MSExperiment, ms_level: int = 2) -> Tuple[floa
         relationship: has_metric_category MS:4000019 ! MS metric
         relationship: has_units MS:1000040 ! m/z
         relationship: has_value_concept STATO:0000035 ! range
+
+    Note:
+        This reads precursor m/z values, so it is meaningful only for MSn
+        (ms_level >= 2). MS1 spectra have no precursor and would yield (NaN, NaN);
+        rawQC therefore does not emit an MS1 precursor m/z range.
 
     Args:
         exp: MSExperiment object
@@ -1066,17 +1335,27 @@ def ms_signal_10x_change(exp: oms.MSExperiment, change: str = "jump", ms_level: 
         >>> jumps = ms_signal_10x_change(exp, change="jump", ms_level=1)
         >>> falls = ms_signal_10x_change(exp, change="fall", ms_level=1)
     """
+    if change not in ("jump", "fall"):
+        raise ValueError(f"change must be 'jump' or 'fall', got {change!r}")
     specs = _filter_by_mslevel(exp, ms_level)
-    if len(specs) < 2: return np.nan
+    # The CV terms require an integer count. With fewer than two spectra there
+    # are no adjacent pairs, so the count is 0 (not NaN).
+    if len(specs) < 2:
+        return 0
     specs = sorted(specs, key=lambda s: s.getRT())
     tic = _ion_counts(specs)
     prev, foll = tic[:-1], tic[1:]
-    with np.errstate(divide='ignore', invalid='ignore'):
-        ratio = foll / prev
+    # Only adjacent pairs with a finite, strictly positive previous TIC define a
+    # meaningful fold-change. Pairs with a non-finite or zero denominator (empty
+    # or missing scans) are excluded rather than being turned into inf/NaN by the
+    # division. A fall to exactly zero (prev>0, foll==0) still counts as a >=10x
+    # fall; a jump *from* zero is undefined and is not counted.
+    valid = np.isfinite(prev) & np.isfinite(foll) & (prev > 0.0)
+    ratio = foll[valid] / prev[valid]
     if change == "jump":
-        return int(np.nansum(ratio >= 10.0))
+        return int(np.sum(ratio >= 10.0))
     else:
-        return int(np.nansum(ratio <= 0.1))
+        return int(np.sum(ratio <= 0.1))
 
 def number_empty_scans(exp: oms.MSExperiment, ms_level: int = 1) -> int:
     """
@@ -1165,7 +1444,7 @@ def precursor_intensity_stats(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[
         >>> print(stats['PrecursorIntensity_Q2'])  # median
     """
     specs = _filter_by_mslevel(exp, ms_level)
-    _, preI, _ = _precursor_values(specs)
+    preI, _, _ = precursor_intensities(specs)
     preI = preI[~np.isnan(preI)]
     if preI.size == 0:
         return {
@@ -1184,9 +1463,10 @@ def precursor_intensity_stats(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[
         "PrecursorIntensity_Sd": float(np.std(preI, ddof=1)) if preI.size > 1 else np.nan,
     }
 
-def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2) -> float:
+def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2,
+                        accepted_native_ids: Optional[set] = None) -> float:
     """
-    MS2 precursor median m/z of identified quantification data points (MS:4000152).
+    ID-free proxy for the median precursor m/z of identified data points (MS:4000152).
 
     MS:4000152:
     "Median m/z value for MS2 precursors of all quantification data points after
@@ -1206,13 +1486,17 @@ def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2) -> float:
         relationship: has_units MS:1000040 ! m/z
 
     Note:
-        This will calculate the precursor median m/z of all spectra. If the calculation
-        needs to be done according to MS:4000152, the spectra should be filtered to
-        identified spectra beforehand.
+        MS:4000152 is an ID-based term ("all quantification data points after
+        user-defined acceptance criteria are applied"). Without identifications
+        rawQC computes the median precursor m/z over ALL MS2 precursors, which is
+        an ID-free proxy and is emitted WITHOUT the MS:4000152 accession. Pass
+        ``accepted_native_ids`` (accepted spectrum native IDs) to restrict the
+        computation to identified spectra and reproduce the ID-based definition.
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 2)
+        accepted_native_ids: optional set of accepted spectrum native IDs
 
     Returns:
         float: Median precursor m/z
@@ -1221,12 +1505,23 @@ def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2) -> float:
         >>> median_mz = median_precursor_mz(exp, ms_level=2)
     """
     specs = _filter_by_mslevel(exp, ms_level)
+    if accepted_native_ids is not None:
+        wanted = set(accepted_native_ids)
+        specs = [s for s in specs if s.getNativeID() in wanted]
     preMz, _, _ = _precursor_values(specs)
     return _nanmedian(preMz)
 
-def rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def rt_iqr(exp: oms.MSExperiment, ms_level: int = 1,
+           accepted_native_ids: Optional[set] = None) -> float:
     """
-    Interquartile RT period for identified quantification data points (MS:4000153).
+    ID-free proxy for the interquartile RT period (MS:4000153, C-2A).
+
+    MS:4000153 is an ID-based term ("after user-defined acceptance criteria are
+    applied"). Without identifications rawQC computes the interquartile RT period
+    over ALL spectra of the MS level, which is an ID-free proxy and is emitted
+    WITHOUT the MS:4000153 accession. Pass ``accepted_native_ids`` (accepted
+    spectrum native IDs) to restrict the computation to identified spectra and
+    reproduce the ID-based definition.
 
     MS:4000153:
     "The interquartile retention time period, in seconds, for all quantification
@@ -1260,11 +1555,16 @@ def rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     Example:
         >>> iqr = rt_iqr(exp, ms_level=1)
     """
-    return _iqr(_rts(_filter_by_mslevel(exp, ms_level)))
+    return _iqr(_rts(_select_spectra(exp, ms_level, accepted_native_ids)))
 
-def rt_iqr_rate(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def rt_iqr_rate(exp: oms.MSExperiment, ms_level: int = 1,
+                accepted_native_ids: Optional[set] = None) -> float:
     """
-    Rate of the interquartile RT period for identified quantification data points (MS:4000154).
+    ID-free proxy for the interquartile-RT-period rate (MS:4000154, C-2B).
+
+    Like :func:`rt_iqr`, MS:4000154 is ID-based. Without identifications this is
+    an ID-free proxy over all spectra of the MS level, emitted without the
+    accession; ``accepted_native_ids`` restricts it to identified spectra.
 
     MS:4000154:
     "The rate of identified quantification data points for the interquartile
@@ -1297,7 +1597,7 @@ def rt_iqr_rate(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     Example:
         >>> rate = rt_iqr_rate(exp, ms_level=1)
     """
-    specs = _filter_by_mslevel(exp, ms_level)
+    specs = _select_spectra(exp, ms_level, accepted_native_ids)
     rts = _rts(specs)
     if rts.size == 0: return np.nan
     qs = np.quantile(rts, [0.25, 0.75])
@@ -1313,9 +1613,15 @@ def area_under_tic(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     MS:4000155:
     "The area under the total ion chromatogram." [PSI:MS]
 
+    Decision (issue #30): the CV terms MS:4000029/MS:4000030/MS:4000155 describe
+    an *area under a curve*, so rawQC computes a true **time integral** of the
+    TIC against retention time (trapezoidal rule), not a bare per-spectrum sum.
+    On irregularly sampled data a sum is not an area and has different
+    dimensions. Unit: intensity x second.
+
     The metric is calculated as follows:
-    (1) The spectra are filtered according to the MS level,
-    (2) The sum of the ion counts are obtained and returned.
+    (1) The spectra are filtered according to the MS level and ordered by RT,
+    (2) The TIC (ion count) is integrated over retention time (trapezoidal).
 
     Details:
         MS:4000155
@@ -1324,20 +1630,34 @@ def area_under_tic(exp: oms.MSExperiment, ms_level: int = 1) -> float:
         relationship: has_metric_category MS:4000017 ! chromatogram metric
 
     Note:
-        The sum of the TIC is returned as an equivalent to the area.
+        Requires at least two finite-RT spectra to define a time interval;
+        otherwise NaN is returned (an area needs a non-zero RT span).
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 1)
 
     Returns:
-        float: Sum of total ion counts (area under TIC)
+        float: Time integral of the TIC over retention time (area under TIC)
 
     Example:
         >>> area = area_under_tic(exp, ms_level=1)
     """
     specs = _filter_by_mslevel(exp, ms_level)
-    return float(np.nansum(_ion_counts(specs))) if specs else np.nan
+    if not specs:
+        return np.nan
+    rts = _rts(specs)
+    tic = _ion_counts(specs)
+    # Drop non-finite pairs BEFORE ordering: sorting spectra by a NaN retention
+    # time is unreliable (NaN comparisons are false), which would leave the
+    # arrays unsorted and yield a negative "area" from the trapezoidal rule.
+    finite = np.isfinite(rts) & np.isfinite(tic)
+    rts, tic = rts[finite], tic[finite]
+    if rts.size < 2:
+        return np.nan
+    order = np.argsort(rts)
+    rts, tic = rts[order], tic[order]
+    return _trapz(tic, rts)
 
 def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> List[float]:
     """
@@ -1365,7 +1685,9 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     Note:
         This function interprets the quantiles from [PSI:MS] definition as
         quartiles, i.e. the 0, 25, 50, 75 and 100% quantiles are used.
-        The sum of the TIC is returned as an equivalent to the area.
+        Consistent with issue #30, each quartile value is a trapezoidal time
+        integral of the TIC over its RT sub-interval (intensity x second), not a
+        per-spectrum sum; the four values sum to the whole-run integral.
 
     Args:
         exp: MSExperiment object
@@ -1379,19 +1701,31 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     """
     specs = _filter_by_mslevel(exp, ms_level)
     if len(specs) == 0: return [np.nan]*4
-    specs = sorted(specs, key=lambda s: s.getRT())
     rts = _rts(specs)
     tic = _ion_counts(specs)
+    # Drop non-finite pairs before ordering (see area_under_tic).
+    finite = np.isfinite(rts) & np.isfinite(tic)
+    rts, tic = rts[finite], tic[finite]
+    if rts.size < 2:
+        return [np.nan] * 4
+    order = np.argsort(rts)
+    rts, tic = rts[order], tic[order]
     qs = np.quantile(rts, [0.0, 0.25, 0.50, 0.75, 1.0])
-    q1 = tic[(rts > qs[0]) & (rts <= qs[1])]
-    q2 = tic[(rts > qs[1]) & (rts <= qs[2])]
-    q3 = tic[(rts > qs[2]) & (rts <= qs[3])]
-    q4 = tic[(rts > qs[3]) & (rts <= qs[4])]
-    return [float(np.nansum(q)) for q in (q1, q2, q3, q4)]
+    # Integrate the TIC over retention time (issue #30, area-under-curve) and
+    # split the integral at the quartile RT boundaries (issue #31: all four
+    # values, the minimum-RT scan included via the boundary at qs[0], and the
+    # four areas conserving the whole-run integral). The CUMULATIVE trapezoidal
+    # integral interpolated at each boundary handles partial trapezoids that
+    # straddle a boundary and never spuriously collapses a sparse quartile to 0.
+    seg = 0.5 * (tic[1:] + tic[:-1]) * (rts[1:] - rts[:-1])
+    cumint = np.concatenate(([0.0], np.cumsum(seg)))  # integral from rts[0] to rts[i]
+    bounds = np.interp(qs, rts, cumint)                # cumulative area at each quartile RT
+    return [float(bounds[i + 1] - bounds[i]) for i in range(4)]
 
-def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int = 2) -> float:
+def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int = 2,
+                                          accepted_native_ids: Optional[set] = None) -> float:
     """
-    Extent of identified MS2 precursor intensity (MS:4000157).
+    ID-free proxy for the extent of identified MS2 precursor intensity (MS:4000157).
 
     MS:4000157:
     "Ratio of 95th over 5th percentile of MS2 precursor intensity for all
@@ -1415,12 +1749,17 @@ def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int =
         relationship: has_metric_category MS:4000022 ! MS2 metric
 
     Note:
-        Computed over all MS2 precursors (no ID info in plain mzML).
-        Precursor intensity values that are NA are removed.
+        MS:4000157 is an ID-based term (MS1-3A) whose reference implementation
+        (SMAQC) is based on identified-peptide XIC peak-apex intensities. Without
+        identifications rawQC computes the 95/5 ratio over ALL MS2 precursor
+        intensities, which is an ID-free proxy and is emitted WITHOUT the
+        MS:4000157 accession. Pass ``accepted_native_ids`` to restrict to
+        identified spectra. Precursor intensity values that are NA are removed.
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 2)
+        accepted_native_ids: optional set of accepted spectrum native IDs
 
     Returns:
         float: Ratio of 95th/5th percentile intensities
@@ -1428,19 +1767,27 @@ def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int =
     Example:
         >>> extent = extent_identified_precursor_intensity(exp, ms_level=2)
     """
-    # computed over all MS2 precursors (no ID info in plain mzML)
     specs = _filter_by_mslevel(exp, ms_level)
-    _, preI, _ = _precursor_values(specs)
+    # Optional accepted-ID filter (#40) applied before the QuaMeter MS2-TIC
+    # fallback intensity extraction (#39).
+    if accepted_native_ids is not None:
+        wanted = set(accepted_native_ids)
+        specs = [s for s in specs if s.getNativeID() in wanted]
+    preI, _, _ = precursor_intensities(specs)
     preI = preI[~np.isnan(preI)]
     if preI.size == 0: return np.nan
     q5, q95 = np.quantile(preI, [0.05, 0.95])
     if q5 == 0: return np.nan
     return float(q95 / q5)
 
-def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1,
+                      accepted_native_ids: Optional[set] = None) -> float:
     """
-    Median of TIC values in the RT range in which the middle half of
-    quantification data points are identified (MS:4000158).
+    ID-free proxy for the median TIC over the middle-half RT range (MS:4000158).
+
+    MS:4000158 is ID-based. Without identifications this is computed over all
+    spectra of the MS level (ID-free proxy, emitted without the accession);
+    ``accepted_native_ids`` restricts it to identified spectra.
 
     MS:4000158:
     "Median of TIC values in the RT range in which half of quantification data
@@ -1477,22 +1824,31 @@ def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     Example:
         >>> median_tic = median_tic_rt_iqr(exp, ms_level=1)
     """
-    specs = _filter_by_mslevel(exp, ms_level)
+    specs = _select_spectra(exp, ms_level, accepted_native_ids)
     if not specs: return np.nan
     specs = sorted(specs, key=lambda s: s.getRT())
     tic = _ion_counts(specs)
-    # Use index-based quartiling like R implementation
-    # R: ind <- rep(seq_len(4), length.out = length(spectra))
-    # R: Q1ToQ3 <- spectra[ind %in% c(2, 3), ]
+    # Reproduce the MsQuality R partition exactly:
+    #   ind <- rep(seq_len(4), length.out = n); ind <- sort(ind)
+    #   Q1ToQ3 <- spectra[ind %in% c(2, 3), ]
+    # np.resize recycles [1,2,3,4] element-wise to length n (== R's length.out),
+    # then sorting yields R's recycle-and-sort group assignment. The previous
+    # code used np.repeat with ceil(n/4) contiguous blocks, which gives a
+    # different partition whenever n is not divisible by 4 (e.g. n=5: R group
+    # sizes 2/1/1/1 vs. the old 2/2/1/0).
     n = len(specs)
-    ind = np.repeat(np.arange(1, 5), repeats=int(np.ceil(n / 4)))[:n]
+    ind = np.sort(np.resize(np.arange(1, 5), n))
     sel = (ind == 2) | (ind == 3)
     return _nanmedian(tic[sel])
 
-def median_tic_of_rt_range(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def median_tic_of_rt_range(exp: oms.MSExperiment, ms_level: int = 1,
+                           accepted_native_ids: Optional[set] = None) -> float:
     """
-    Median of TIC values in the shortest RT range in which half of the
-    quantification data points are identified (MS:4000159).
+    ID-free proxy for the median TIC over the shortest half-RT range (MS:4000159, MS1-2B).
+
+    MS:4000159 is ID-based. Without identifications this is computed over all
+    spectra of the MS level (ID-free proxy, emitted without the accession);
+    ``accepted_native_ids`` restricts it to identified spectra.
 
     MS:4000159:
     "Median of TIC values in the shortest RT range in which half of the
@@ -1531,7 +1887,7 @@ def median_tic_of_rt_range(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     Example:
         >>> median_tic = median_tic_of_rt_range(exp, ms_level=1)
     """
-    specs = _filter_by_mslevel(exp, ms_level)
+    specs = _select_spectra(exp, ms_level, accepted_native_ids)
     n = len(specs)
     if n == 0: return np.nan
     specs = sorted(specs, key=lambda s: s.getRT())
@@ -1547,76 +1903,84 @@ def median_tic_of_rt_range(exp: oms.MSExperiment, ms_level: int = 1) -> float:
             best_slice = slice(i, i + half)
     return _nanmedian(tic[best_slice])
 
-def tic_quantile_rt_fraction(exp: oms.MSExperiment, ms_level: int = 1, probs: Tuple[float, ...] = (0.0, 0.25, 0.50, 0.75, 1.0), relative: bool = True) -> List[float]:
+def tic_quantile_rt_fraction(exp: oms.MSExperiment, ms_level: int = 1) -> List[float]:
     """
-    TIC quantile RT fraction (MS:4000183).
+    TIC accumulation RT quantiles (MS:4000183).
 
     MS:4000183:
     "The interval when the respective quantile of the TIC accumulates divided by
     retention time duration. The number of values in the tuple implies the
     quantile mode." [PSI:MS]
 
-    The metric informs about the dynamic range of the acquisition along the
-    chromatographic separation. The metric provides information on the sample
-    (compound) flow along the chromatographic run, potentially revealing poor
-    chromatographic performance, such as the absence of a signal for a
-    significant portion of the run.
+    Normative contract (issue #32): the current term describes an n-tuple of
+    RT *intervals*, and the original QuaMeter implementation returns four
+    consecutive interval widths normalized by the MS-level duration. rawQC
+    reproduces the QuaMeter definition:
 
-    The metric is calculated as follows:
-    (1) The spectra are ordered according to retention time,
-    (2) The cumulative sum of the ion count is calculated (TIC),
-    (3) The quantiles are calculated according to the probs argument,
-    (4) The retention time/relative retention time (retention time divided by
-        the total run time taking into account the minimum retention time) is
-        calculated,
-    (5) The (relative) duration of the LC run after which the cumulative TIC
-        exceeds (for the first time) the respective quantile of the cumulative
-        TIC is calculated and returned.
+        t1,t2,t3 = retention times at which the cumulative TIC first reaches
+                   25%, 50%, 75% of the total TIC
+        interval_1 = (t1 - RTmin) / duration
+        interval_2 = (t2 - t1)    / duration
+        interval_3 = (t3 - t2)    / duration
+        interval_4 = (RTmax - t3) / duration
+
+    where ``duration`` is the acquisition span of *this MS level* (RTmax - RTmin
+    of the level), not the whole experiment. The four intervals sum to 1.0.
+
+    This replaces the previous behavior, which emitted five cumulative RT
+    positions normalized by the whole-experiment duration across all MS levels.
+    If the MsQuality cumulative-position representation is needed, it should be
+    exposed as a separately named custom metric.
 
     Details:
         MS:4000183
-        synonym: "RT-TIC-Q1" RELATED [PMID:24494671]
-        synonym: "RT-TIC-Q2" RELATED [PMID:24494671]
-        synonym: "RT-TIC-Q3" RELATED [PMID:24494671]
-        synonym: "RT-TIC-Q4" RELATED [PMID:24494671]
+        synonym: "RT-TIC-Q1..Q4" RELATED [PMID:24494671]
         is_a: MS:4000004 ! n-tuple
-        relationship: has_metric_category MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000016 ! retention time metric
-        relationship: has_metric_category MS:4000017 ! chromatogram metric
         relationship: has_units UO:0000191 ! fraction
-        relationship: has_value_concept STATO:0000291
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 1)
-        probs: tuple, quantiles to calculate (default: (0.0, 0.25, 0.5, 0.75, 1.0))
-        relative: bool, return relative RT (True) or absolute RT (False)
 
     Returns:
-        list: Float values representing RT fractions for each quantile
+        list: four RT interval fractions (summing to 1.0), or [NaN]*4
 
     Example:
         >>> fractions = tic_quantile_rt_fraction(exp, ms_level=1)
     """
     specs = _filter_by_mslevel(exp, ms_level)
-    if not specs: return [np.nan]*len(probs)
-    specs = sorted(specs, key=lambda s: s.getRT())
+    if not specs:
+        return [np.nan] * 4
     rts = _rts(specs)
-    tic_cum = np.cumsum(_ion_counts(specs))
-    total = float(np.max(tic_cum)) if tic_cum.size else 0.0
-    idxs = []
-    for p in probs:
-        target = p * total
-        idx = int(np.argmax(tic_cum >= target))
-        idxs.append(idx)
-    if relative:
-        rtmin = float(np.min(rts))
-        dur = chromatography_duration(exp)
-        if not dur or not np.isfinite(dur):
-            return [np.nan]*len(probs)
-        return [float((rts[i]-rtmin)/dur) for i in idxs]
-    else:
-        return [float(rts[i]) for i in idxs]
+    tic = _ion_counts(specs)
+    # Drop non-finite pairs BEFORE ordering: sorting spectra by a NaN retention
+    # time is unreliable, so filtering after the sort would leave the arrays
+    # unsorted and make rts[0]/rts[-1] and the cumulative TIC meaningless.
+    finite = np.isfinite(rts) & np.isfinite(tic)
+    rts, tic = rts[finite], tic[finite]
+    if rts.size < 2:
+        return [np.nan] * 4
+    order = np.argsort(rts)
+    rts, tic = rts[order], tic[order]
+    rtmin, rtmax = float(rts[0]), float(rts[-1])
+    duration = rtmax - rtmin
+    if duration <= 0:
+        return [np.nan] * 4
+    cum = np.cumsum(tic)
+    total = float(cum[-1])
+    if not np.isfinite(total) or total <= 0:
+        return [np.nan] * 4
+    frac = cum / total
+    # RT at which cumulative TIC first reaches each threshold.
+    t1 = float(rts[int(np.argmax(frac >= 0.25))])
+    t2 = float(rts[int(np.argmax(frac >= 0.50))])
+    t3 = float(rts[int(np.argmax(frac >= 0.75))])
+    return [
+        (t1 - rtmin) / duration,
+        (t2 - t1) / duration,
+        (t3 - t2) / duration,
+        (rtmax - t3) / duration,
+    ]
 
 def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]:
     """
@@ -1674,9 +2038,41 @@ def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]
         >>> print(metrics['ChargeMean'])
     """
     specs = _filter_by_mslevel(exp, ms_level)
+    n_ms2 = len(specs)
     _, _, charges = _precursor_values(specs)
+    # Known charge states (>=1); unknown = missing, zero, or non-physical
+    # negative charge, kept as its own bin. QuaMeter stores unknown charge as 0
+    # and divides every bin by ALL MS2 scans, so the fractions have the reference
+    # denominator and sum to 1.0.
     c = charges[~np.isnan(charges)].astype(int)
-    out = {}
+    out: Dict[str, Any] = {}
+
+    # Charge-state fraction table (MS:4000063), denominator = all MS2 scans.
+    labels = ["1", "2", "3", "4", "5", ">=6", "unknown"]
+    if n_ms2 > 0:
+        counts_by_bin = [
+            int(np.sum(c == 1)),
+            int(np.sum(c == 2)),
+            int(np.sum(c == 3)),
+            int(np.sum(c == 4)),
+            int(np.sum(c == 5)),
+            int(np.sum(c >= 6)),
+            # Unknown = every MS2 scan without a valid (>=1) charge: missing,
+            # zero, AND any non-physical negative charge. Basing this on the
+            # count of valid charges (not c.size) keeps the fractions summing to
+            # 1.0 even if a negative charge sneaks through.
+            int(n_ms2 - int(np.sum(c >= 1))),
+        ]
+        fractions = [float(n / n_ms2) for n in counts_by_bin]
+    else:
+        counts_by_bin = [0, 0, 0, 0, 0, 0, 0]
+        fractions = [np.nan] * 7
+    out["MS2_PrecursorCharge_Fractions"] = {
+        "charge_state": list(labels),
+        "count": counts_by_bin,
+        "fraction": fractions,
+    }
+
     if c.size == 0:
         out["ChargeMin"] = np.nan
         out["ChargeMax"] = np.nan
@@ -1684,15 +2080,9 @@ def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]
         out["ChargeRatio_4over2"] = np.nan
         out["ChargeMean"] = np.nan
         out["ChargeMedian"] = np.nan
-        out["MS2-PrecZ-1"] = np.nan
-        out["MS2-PrecZ-2"] = np.nan
-        out["MS2-PrecZ-3"] = np.nan
-        out["MS2-PrecZ-4"] = np.nan
-        out["MS2-PrecZ-5"] = np.nan
-        out["MS2-PrecZ-more"] = np.nan
         return out
 
-    # Min and Max charge states
+    # Min and Max charge states (over known charges)
     out["ChargeMin"] = int(np.min(c))
     out["ChargeMax"] = int(np.max(c))
 
@@ -1710,16 +2100,6 @@ def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]
     else:
         out["ChargeRatio_4over2"] = np.nan
 
-    total_precursors = int(c.size)
-    if total_precursors > 0:
-        for charge_state in range(1, 6):
-            out[f"MS2-PrecZ-{charge_state}"] = float(table.get(charge_state, 0) / total_precursors)
-        higher_charge = sum(count for ch, count in table.items() if ch >= 6)
-        out["MS2-PrecZ-more"] = float(higher_charge / total_precursors)
-    else:
-        for charge_state in range(1, 6):
-            out[f"MS2-PrecZ-{charge_state}"] = np.nan
-        out["MS2-PrecZ-more"] = np.nan
     out["ChargeMean"] = float(np.mean(c))
     out["ChargeMedian"] = float(np.median(c))
     return out
@@ -1795,7 +2175,7 @@ def avg_ms1_cycle_time(exp: oms.MSExperiment) -> float:
     return float(np.mean(diffs))
 
 
-def fastest_ms_frequency(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def fastest_ms_frequency(exp: oms.MSExperiment, ms_level: int = 1, window: float = 60.0) -> float:
     """
     Fastest frequency for MS level 1 collection (MS:4000065) or MS level 2 collection (MS:4000066).
 
@@ -1805,150 +2185,177 @@ def fastest_ms_frequency(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     MS:4000066:
     "Fastest frequency for MS level 2 collection" [PSI:MS]
 
-    Spectrum acquisition frequency can be used to gauge whether instrument settings
-    are well matched to sample complexity. This metric reports the inverse of the
-    minimum positive time difference between consecutive scans for the requested
-    MS level.
+    The original QuaMeter definition (PMID:24494671) is the *maximum acquisition
+    rate sustained over a one-minute window*, not the inverse of the smallest gap
+    between two scans. Reporting ``1 / min-gap`` lets a single unusually close
+    pair of scans dominate the metric with an arbitrarily high value.
+
+    This implementation reproduces the QuaMeter/macproqc one-minute moving
+    window: for each scan at time ``t`` it counts how many scans fall in the
+    interval ``[t, t + window]`` (inclusive), takes the maximum such count over
+    all scans, and divides by the window length (60 s) to obtain a frequency in
+    hertz. Because any single fast pair adds at most one scan to a window, it
+    cannot dominate the result.
+
+    Behavior for short inputs:
+        * No finite retention times -> NaN.
+        * If the level spans less than ``window`` seconds, the moving window
+          still divides by the full window length, so the reported frequency is
+          ``n_scans / window`` -- a conservative lower bound consistent with the
+          reference implementations (there is no full one-minute window to
+          average over).
 
     Details:
         MS:4000065
         synonym: "MS1-Freq-Max" EXACT [PMID:24494671]
-        relationship: has_metric_category MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000021 ! MS1 metric
         relationship: has_units UO:0000106 ! hertz
-
         MS:4000066
         synonym: "MS2-Freq-Max" EXACT [PMID:24494671]
-        relationship: has_metric_category MS:4000022 ! MS2 metric
-        relationship: has_units UO:0000106 ! hertz
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 1)
+        window: float, moving-window length in seconds (default: 60.0)
 
     Returns:
-        float: Fastest observed acquisition frequency in hertz, or NaN if unavailable
-
-    Example:
-        >>> freq_ms1 = fastest_ms_frequency(exp, ms_level=1)
-        >>> freq_ms2 = fastest_ms_frequency(exp, ms_level=2)
+        float: Fastest sustained acquisition frequency in hertz, or NaN if unavailable
     """
-    specs = sorted(_filter_by_mslevel(exp, ms_level), key=lambda s: s.getRT())
-    if len(specs) < 2:
+    rts = _rts(_filter_by_mslevel(exp, ms_level))
+    rts = rts[np.isfinite(rts)]
+    if rts.size == 0:
         return np.nan
+    srt = np.sort(rts)
+    # For each anchor t = srt[i]: count of scans in [t, t + window].
+    hi = np.searchsorted(srt, srt + window, side="right")
+    lo = np.searchsorted(srt, srt, side="left")
+    max_count = int(np.max(hi - lo))
+    return float(max_count / window)
 
-    rts = _rts(specs)
-    if rts.size < 2:
-        return np.nan
 
-    diffs = np.diff(np.sort(rts))
-    diffs = diffs[diffs > 0]
-    if diffs.size == 0:
-        return np.nan
+def _peak_type_summary(counts: Dict[str, int]) -> str:
+    """Summarize per-level peak-type counts into a stable run-wide label."""
+    centroid = counts.get("centroid", 0)
+    profile = counts.get("profile", 0)
+    if centroid and profile:
+        return "mixed"
+    if profile:
+        return "profile"
+    if centroid:
+        return "centroid"
+    return "unknown"
 
-    fastest = float(np.min(diffs))
-    if fastest <= 0:
-        return np.nan
 
-    return float(1.0 / fastest)
+def _profile_fraction(counts: Dict[str, int]) -> float:
+    """Fraction of type-resolved spectra that are profile (NaN if none)."""
+    denom = counts.get("centroid", 0) + counts.get("profile", 0)
+    return float(counts.get("profile", 0) / denom) if denom else np.nan
 
 
 def peak_type_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
     Determine peak type (profile vs centroided) per MS level.
 
-    Uses both metadata annotation and estimation from peak spacing.
+    Aggregates over **all** spectra of each MS level rather than sampling the
+    first spectrum, so a mixed profile/centroid run (or a misleading first
+    spectrum) is reported as "mixed" instead of being presented as homogeneous.
+    For each level and for both the metadata annotation and the peak-spacing
+    estimation, a stable summary label is produced:
+
+        * "centroid" / "profile" -- all type-resolved spectra agree
+        * "mixed"                 -- both centroid and profile occur
+        * "unknown"               -- no spectrum carried a resolvable type
+
+    A companion ``*_ProfileFraction`` value gives the fraction of type-resolved
+    spectra that are profile, exposing annotation-vs-estimation disagreement and
+    the degree of mixing.
 
     Args:
         exp: MSExperiment object
 
     Returns:
-        dict: Peak types per MS level (annotated and estimated)
+        dict: Peak-type summaries and profile fractions per MS level
     """
     from collections import defaultdict
 
-    level_annotated = {}
-    level_estimated = {}
+    annotated_counts: Dict[int, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
+    estimated_counts: Dict[int, Dict[str, int]] = defaultdict(lambda: defaultdict(int))
 
+    estimator = oms.PeakTypeEstimator()
     for spec in exp:
         level = int(spec.getMSLevel())
+        annotated_counts[level][_spectrum_type_to_str(spec.getType())] += 1
+        # Estimation needs enough peaks to be meaningful.
+        if spec.size() > 10:
+            estimated_counts[level][_spectrum_type_to_str(estimator.estimateType(spec))] += 1
 
-        # Get annotated peak type from metadata (once per level)
-        if level not in level_annotated:
-            # Map SpectrumSettings.SpectrumType enum to string
-            level_annotated[level] = oms.SpectrumSettings().spectrumTypeToString(spec.getType())
-
-        # Estimate peak type from data (once per level, need enough peaks)
-        if level not in level_estimated and spec.size() > 10:
-            estimated = oms.PeakTypeEstimator().estimateType(spec)
-            level_estimated[level] = oms.SpectrumSettings().spectrumTypeToString(estimated)
-
-    result = {}
-    for level in sorted(set(list(level_annotated.keys()) + list(level_estimated.keys()))):
-        result[f"MS{level}_PeakType_Annotated"] = level_annotated.get(level, "unknown")
-        result[f"MS{level}_PeakType_Estimated"] = level_estimated.get(level, "unknown")
+    result: Dict[str, Any] = {}
+    for level in sorted(set(annotated_counts) | set(estimated_counts)):
+        ann = annotated_counts.get(level, {})
+        est = estimated_counts.get(level, {})
+        result[f"MS{level}_PeakType_Annotated"] = _peak_type_summary(ann)
+        result[f"MS{level}_PeakType_Annotated_ProfileFraction"] = _profile_fraction(ann)
+        result[f"MS{level}_PeakType_Estimated"] = _peak_type_summary(est)
+        result[f"MS{level}_PeakType_Estimated_ProfileFraction"] = _profile_fraction(est)
 
     return result
 
-def activation_method_statistics(exp: oms.MSExperiment) -> Dict[str, int]:
+def activation_method_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
-    Count activation methods per MS level.
+    Count activation methods per MS level as a single table.
 
-    Activation methods include CID, HCD, ETD, etc.
+    Returns a table (dict of columns) rather than one dynamic key per method, so
+    an arbitrary number of activation methods is preserved without fixed key
+    slots and the result is a single valid custom metric.
 
     Args:
         exp: MSExperiment object
 
     Returns:
-        dict: Counts of activation methods per MS level
+        dict: table with columns ms_level, method, count (possibly empty columns)
     """
     from collections import Counter
 
-    act_method_counts = Counter()
-
+    counts: "Counter" = Counter()
     for spec in exp:
         level = int(spec.getMSLevel())
         for pc in spec.getPrecursors():
             for am in pc.getActivationMethods():
-                am_name = oms.Precursor().activationMethodToShortString(am)
+                counts[(level, _activation_method_to_str(am))] += 1
 
-                key = f"MS{level}_ActivationMethod_{am_name}"
-                act_method_counts[key] += 1
-
-    return dict(act_method_counts)
+    rows = sorted(counts.items())
+    return {
+        "ms_level": [lvl for (lvl, _name), _c in rows],
+        "method": [name for (_lvl, name), _c in rows],
+        "count": [c for _key, c in rows],
+    }
 
 def mass_analyzer_info(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
-    Extract mass analyzer information.
+    Extract mass analyzer information as a single table.
 
-    Returns analyzer type and resolution.
+    Returns a table (dict of columns) covering every mass analyzer, rather than
+    fixed MassAnalyzer_0/MassAnalyzer_1 key slots. Conversion no longer silently
+    drops analyzers on error.
 
     Args:
         exp: MSExperiment object
 
     Returns:
-        dict: Mass analyzer information
+        dict: table with columns index, type, resolution
     """
-    result = {}
-
+    indices: List[int] = []
+    types: List[str] = []
+    resolutions: List[Optional[float]] = []
     try:
-        instrument = exp.getInstrument()
-        analyzers = instrument.getMassAnalyzers()
-
-        if analyzers:
-            for idx, ma in enumerate(analyzers):
-                # Get analyzer type
-                ma_type = oms.MassAnalyzer().analyzerTypeToString(ma.getType())
-                result[f"MassAnalyzer_{idx}_Type"] = ma_type
-
-                # Get resolution if available
-                resolution = ma.getResolution()
-                if resolution > 0:
-                    result[f"MassAnalyzer_{idx}_Resolution"] = float(resolution)
+        analyzers = exp.getInstrument().getMassAnalyzers()
     except Exception:
-        pass
-
-    return result
+        analyzers = []
+    for idx, ma in enumerate(analyzers or []):
+        indices.append(idx)
+        types.append(_analyzer_type_to_str(ma.getType()))
+        res = float(ma.getResolution())
+        resolutions.append(res if res > 0 else None)
+    return {"index": indices, "type": types, "resolution": resolutions}
 
 def number_of_ms_levels(exp: oms.MSExperiment) -> int:
     """
@@ -1978,17 +2385,64 @@ def total_peak_count(exp: oms.MSExperiment) -> int:
     """
     return sum(spec.size() for spec in exp)
 
-def chromatogram_peak_count(exp: oms.MSExperiment) -> int:
+def max_base_peak_intensity(exp: oms.MSExperiment) -> float:
     """
-    Count total number of chromatographic peaks.
+    Maximum base peak intensity across all spectra (MS:4000202).
+
+    MS:4000202:
+    "The maximum base peak intensity of all spectra in a single run." [PSI:MS]
+
+    Every spectrum is considered regardless of MS level (MS1, MS2, MS3, ...),
+    matching the term definition and independent implementations that iterate
+    all spectra. Spectra with no peaks (empty scans) are skipped. If the run
+    contains no non-empty spectra, NaN is returned.
 
     Args:
         exp: MSExperiment object
 
     Returns:
-        int: Total chromatographic peak count
+        float: Maximum base peak intensity across the whole run, or NaN if empty
+    """
+    max_bp = np.nan
+    for spec in exp:
+        if spec.size() == 0:
+            continue
+        _, intens = spec.get_peaks()
+        if intens.size == 0:
+            continue
+        m = float(np.max(intens))
+        if np.isnan(max_bp) or m > max_bp:
+            max_bp = m
+    return max_bp
+
+def chromatogram_point_count(exp: oms.MSExperiment) -> int:
+    """
+    Count total number of chromatogram data points.
+
+    This sums the array lengths of all chromatograms, i.e. the number of stored
+    (RT, intensity) data points, NOT the number of resolved chromatographic
+    peaks. Peak detection is not performed here, so the metric is named
+    accordingly (see NumberOfChromatogramDataPoints).
+
+    Args:
+        exp: MSExperiment object
+
+    Returns:
+        int: Total chromatogram data-point count
     """
     return sum(chrom.size() for chrom in exp.getChromatograms())
+
+
+# OpenMS ChromatogramSettings.ChromatogramType (int) -> stable short key used for
+# the Chromatograms_* metric names. Any value not listed maps to "Unknown".
+_CHROM_TYPE_KEYS = {
+    0: "XIC",   # MASS_CHROMATOGRAM (extracted-ion / mass chromatogram)
+    1: "TIC",   # TOTAL_ION_CURRENT_CHROMATOGRAM
+    2: "SIC",   # SELECTED_ION_CURRENT_CHROMATOGRAM
+    3: "BPC",   # BASEPEAK_CHROMATOGRAM
+    4: "SIM",   # SELECTED_ION_MONITORING_CHROMATOGRAM
+    5: "SRM",   # SELECTED_REACTION_MONITORING_CHROMATOGRAM
+}
 
 def faims_compensation_voltages(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
@@ -2000,14 +2454,16 @@ def faims_compensation_voltages(exp: oms.MSExperiment) -> Dict[str, Any]:
     Returns:
         dict: FAIMS CV information
     """
-    result = {}
+    result: Dict[str, Any] = {}
 
-    cvs = oms.FAIMSHelper().getCompensationVoltages(exp)
+    cvs = _faims_compensation_voltages(exp)
     if cvs:
-        result["FAIMS_CV_Count"] = len(cvs)
-        result["FAIMS_CV_Values"] = [float(cv) for cv in cvs]
-        result["FAIMS_CV_Min"] = float(min(cvs))
-        result["FAIMS_CV_Max"] = float(max(cvs))
+        values = [float(cv) for cv in cvs]
+        # Distinguish the distinct values, their [min, max] range, and the count.
+        # Voltages are in volts (documented in the metric metadata).
+        result["FAIMS_CV_Count"] = len(values)
+        result["FAIMS_CV_Values"] = values
+        result["FAIMS_CV_Range"] = [min(values), max(values)]
 
     return result
 
@@ -2017,8 +2473,13 @@ def chromatogram_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
 
     Analyzes all chromatograms in the mzML file to determine:
     - Total number of chromatograms
-    - Counts by type (TIC, BPC, SRM, MRM, XIC, etc.)
+    - Counts by type keyed by stable short names (TIC, BPC, SRM, SIM, XIC, SIC,
+      Unknown), mapped from the OpenMS ChromatogramType enum
     - RT range covered by chromatograms
+
+    RT-range policy: only finite chromatogram RT bounds contribute. If there are
+    no chromatograms (or none with finite RT bounds, e.g. all empty), the RT
+    range is (NaN, NaN).
 
     Args:
         exp: MSExperiment object
@@ -2035,36 +2496,26 @@ def chromatogram_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
     chroms = exp.getChromatograms()
     chrom_total = len(chroms)
 
-    chrom_type_counts = Counter()
-    
-    # Map common chromatogram PSI-MS accessions to readable names
-    PSI_CHROM_TYPES = {
-        "MS:1000235": "tic",                      # total ion current chromatogram
-        "MS:1000627": "bpc",                      # base peak chromatogram
-        "MS:1001472": "srm",                      # SRM chromatogram
-        "MS:1001473": "sim",                      # SIM chromatogram
-        "MS:1000628": "selected_ion_current",     # SIC
-        "MS:1001474": "mrm",                      # MRM chromatogram
-        "MS:1002007": "xic",                      # extracted ion chromatogram
-    }
-    
-    # fallback when no chromatogram type is set or recognized
+    chrom_type_counts: "Counter" = Counter()
     chrom_rt_min = np.nan
     chrom_rt_max = np.nan
-        
-    ChromatogramNames = ["mass chromatogram", "total ion current chromatogram", "selected ion current chromatogram" ,"base peak chromatogram",
-                                                                "selected ion monitoring chromatogram" ,"selected reaction monitoring chromatogram" ,"electromagnetic radiation chromatogram",
-                                                                "absorption chromatogram", "emission chromatogram", "unknown chromatogram"]
+
     for ch in chroms:
-        # Determine chromatogram type from metadata
-        cname = ChromatogramNames[ch.getChromatogramType()] if ch.getChromatogramType() < len(ChromatogramNames) else "unknown"
+        key = _CHROM_TYPE_KEYS.get(int(ch.getChromatogramType()), "Unknown")
+        chrom_type_counts[key] += 1
 
-        chrom_type_counts[cname] += 1
-
-        # RT coverage
-        ch.updateRanges()  # Ensure RT range is updated
-        chrom_rt_min = np.nanmin([chrom_rt_min, ch.getMinRT()])
-        chrom_rt_max = np.nanmax([chrom_rt_max, ch.getMaxRT()])
+        # RT coverage: empty chromatograms have no (uninitialized) range and must
+        # not corrupt the overall bounds. Only non-empty chromatograms with
+        # finite RT bounds contribute.
+        if ch.size() == 0:
+            continue
+        ch.updateRanges()
+        cmin = ch.getMinRT()
+        cmax = ch.getMaxRT()
+        if np.isfinite(cmin):
+            chrom_rt_min = cmin if np.isnan(chrom_rt_min) else min(chrom_rt_min, cmin)
+        if np.isfinite(cmax):
+            chrom_rt_max = cmax if np.isnan(chrom_rt_max) else max(chrom_rt_max, cmax)
 
     return {
         "total_chromatograms": chrom_total,
@@ -2081,14 +2532,14 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     ms1_specs = _filter_by_mslevel(exp, 1)
     ms2_specs = _filter_by_mslevel(exp, 2)
 
-    rt_ms1 = _rts(ms1_specs)
-    rt_ms2 = _rts(ms2_specs)
     tic_ms1 = _ion_counts(ms1_specs)
     tic_ms2 = _ion_counts(ms2_specs)
 
-    total_time_min = ((np.max(np.r_[rt_ms1, rt_ms2]) - np.min(np.r_[rt_ms1, rt_ms2])) / 60.0) if (rt_ms1.size or rt_ms2.size) else 0
-    scan_rate_ms1 = len(ms1_specs) / total_time_min if total_time_min > 0 else np.nan
-    scan_rate_ms2 = len(ms2_specs) / total_time_min if total_time_min > 0 else np.nan
+    # Level-specific scan rates use each level's own acquisition span (see
+    # scan_rate); the previous combined MS1+MS2 duration misreported a level's
+    # rate whenever the two levels had different RT spans.
+    scan_rate_ms1 = scan_rate(exp, 1)
+    scan_rate_ms2 = scan_rate(exp, 2)
 
     density_ms1 = peak_density_quantiles(exp, 1)
     density_ms2 = peak_density_quantiles(exp, 2)
@@ -2098,7 +2549,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     rt_quantiles_ms1 = rt_over_ms_quantiles(exp, 1)
     rt_quantiles_ms2 = rt_over_ms_quantiles(exp, 2)
     qareas = area_under_tic_rt_quantiles(exp, 1)
-    tfr = tic_quantile_rt_fraction(exp, 1, relative=True)
+    tfr = tic_quantile_rt_fraction(exp, 1)
 
     def _safe_get(values, index):
         try:
@@ -2115,7 +2566,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["MS1_to_MS2_Ratio"] = float(len(ms1_specs) / len(ms2_specs)) if len(ms2_specs) > 0 else np.nan
     computed["ChromatographyDuration"] = chromatography_duration(exp)
     computed["NumberOfChromatograms"] = chrom_stats["total_chromatograms"]
-    computed["NumberOfChromatographicPeaks"] = chromatogram_peak_count(exp)
+    computed["NumberOfChromatogramDataPoints"] = chromatogram_point_count(exp)
     computed["NumberOfSpectralPeaks"] = total_peak_count(exp)
 
     for level in (1, 2):
@@ -2133,45 +2584,32 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["EmptyScans_MS1"] = number_empty_scans(exp, 1)
     computed["EmptyScans_MS2"] = number_empty_scans(exp, 2)
 
-    mzmin_ms1, mzmax_ms1 = mz_acquisition_range(exp, 1)
-    mzmin_ms2, mzmax_ms2 = mz_acquisition_range(exp, 2)
-    computed["MzRange_MS1_Min"] = mzmin_ms1
-    computed["MzRange_MS1_Max"] = mzmax_ms1
-    computed["MzRange_MS2_Min"] = mzmin_ms2
-    computed["MzRange_MS2_Max"] = mzmax_ms2
+    # Precursor m/z range (MS:4000069) is defined for MSn only; MS1 spectra have
+    # no precursor, so no MS1 precursor range is emitted. Each range is one
+    # two-value [min, max] n-tuple.
+    computed["MzRange_MS2"] = [float(x) for x in mz_acquisition_range(exp, 2)]
+    computed["RtRange_MS1"] = [float(x) for x in rt_acquisition_range(exp, 1)]
+    computed["RtRange_MS2"] = [float(x) for x in rt_acquisition_range(exp, 2)]
 
-    rtmin_ms1, rtmax_ms1 = rt_acquisition_range(exp, 1)
-    rtmin_ms2, rtmax_ms2 = rt_acquisition_range(exp, 2)
-    computed["RtRange_MS1_Min"] = rtmin_ms1
-    computed["RtRange_MS1_Max"] = rtmax_ms1
-    computed["RtRange_MS2_Min"] = rtmin_ms2
-    computed["RtRange_MS2_Max"] = rtmax_ms2
-
-    computed["RT_MS1_Q1"] = _safe_get(rt_quantiles_ms1, 0)
-    computed["RT_MS1_Q2"] = _safe_get(rt_quantiles_ms1, 1)
-    computed["RT_MS1_Q3"] = _safe_get(rt_quantiles_ms1, 2)
-    computed["RT_MS1_Q4"] = _safe_get(rt_quantiles_ms1, 3)
-    computed["RT_MS2_Q1"] = _safe_get(rt_quantiles_ms2, 0)
-    computed["RT_MS2_Q2"] = _safe_get(rt_quantiles_ms2, 1)
-    computed["RT_MS2_Q3"] = _safe_get(rt_quantiles_ms2, 2)
-    computed["RT_MS2_Q4"] = _safe_get(rt_quantiles_ms2, 3)
+    # MS:4000184/MS:4000185 emitted as one four-value interval n-tuple each.
+    computed["RT_MS1_Quantiles"] = [float(x) for x in rt_quantiles_ms1]
+    computed["RT_MS2_Quantiles"] = [float(x) for x in rt_quantiles_ms2]
     computed["RT_MS1_IQR"] = rt_iqr(exp, 1)
     computed["RT_MS1_IQRRate"] = rt_iqr_rate(exp, 1)
 
     computed["TIC_MS1_Area"] = area_under_tic(exp, 1)
     computed["TIC_MS2_Area"] = area_under_tic(exp, 2)
-    computed["TIC_MS1_Area_RTQ1"] = _safe_get(qareas, 0)
-    computed["TIC_MS1_Area_RTQ2"] = _safe_get(qareas, 1)
-    computed["TIC_MS1_Area_RTQ3"] = _safe_get(qareas, 2)
+    # All four RT-quartile areas are emitted as one MS:4000156 n-tuple (the old
+    # code exposed only Q1-Q3 as separate scalars and discarded Q4).
+    computed["TIC_MS1_Area_RTQuantiles"] = [float(x) for x in qareas]
     computed["MedianTIC_in_RT_MS1_IQR"] = median_tic_rt_iqr(exp, 1)
     computed["TIC_MS1_MedianInHalfRange"] = median_tic_of_rt_range(exp, 1)
-    computed["RT_TIC_Q0"] = _safe_get(tfr, 0)
-    computed["RT_TIC_Q1"] = _safe_get(tfr, 1)
-    computed["RT_TIC_Q2"] = _safe_get(tfr, 2)
-    computed["RT_TIC_Q3"] = _safe_get(tfr, 3)
-    computed["RT_TIC_Q4"] = _safe_get(tfr, 4)
-    computed["TIC_MS1_CV"] = float(np.std(tic_ms1) / np.mean(tic_ms1)) if tic_ms1.size > 1 and np.mean(tic_ms1) else np.nan
-    computed["TIC_MS2_CV"] = float(np.std(tic_ms2) / np.mean(tic_ms2)) if tic_ms2.size > 1 and np.mean(tic_ms2) else np.nan
+    # MS:4000183 emitted as one four-value interval n-tuple.
+    computed["RT_TIC_Quantiles"] = [float(x) for x in tfr]
+    # Coefficient of variation uses the *sample* standard deviation (ddof=1),
+    # consistent with the precursor-intensity SD (MS:4000118) and R's sd().
+    computed["TIC_MS1_CV"] = float(np.std(tic_ms1, ddof=1) / np.mean(tic_ms1)) if tic_ms1.size > 1 and np.mean(tic_ms1) else np.nan
+    computed["TIC_MS2_CV"] = float(np.std(tic_ms2, ddof=1) / np.mean(tic_ms2)) if tic_ms2.size > 1 and np.mean(tic_ms2) else np.nan
 
     computed["TIC_MS1_SignalJump10x_Count"] = ms_signal_10x_change(exp, "jump", 1)
     computed["TIC_MS1_SignalFall10x_Count"] = ms_signal_10x_change(exp, "fall", 1)
@@ -2207,14 +2645,17 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
             _, intens = spec.get_peaks()
             if intens.size > 0:
                 base_peaks_ms2.append(float(np.max(intens)))
-    all_base_peaks = base_peaks_ms1 + base_peaks_ms2
     computed["BasePeak_MS1_Mean"] = float(np.mean(base_peaks_ms1)) if base_peaks_ms1 else np.nan
     computed["BasePeak_MS2_Mean"] = float(np.mean(base_peaks_ms2)) if base_peaks_ms2 else np.nan
-    computed["BasePeak_All_Max"] = float(np.max(all_base_peaks)) if all_base_peaks else np.nan
+    # MS:4000202 is defined over *all* spectra regardless of MS level, so it must
+    # include MS3+ base peaks, not just the MS1/MS2 subsets collected above.
+    computed["BasePeak_All_Max"] = max_base_peak_intensity(exp)
 
     computed["PrecursorMz_MS2_Median"] = median_precursor_mz(exp, 2)
     computed["ExtentPrecursorIntensity_95over5_MS2"] = extent_identified_precursor_intensity(exp, 2)
     computed.update(precursor_intensity_stats(exp, 2))
+    _, _n_prec_fallback, _ = precursor_intensities(ms2_specs)
+    computed["PrecursorIntensity_FallbackCount"] = int(_n_prec_fallback)
 
     computed["ChargeMin"] = charge_info.get("ChargeMin", np.nan)
     computed["ChargeMax"] = charge_info.get("ChargeMax", np.nan)
@@ -2222,117 +2663,22 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["ChargeRatio_4over2"] = charge_info.get("ChargeRatio_4over2", np.nan)
     computed["ChargeMean"] = charge_info.get("ChargeMean", np.nan)
     computed["ChargeMedian"] = charge_info.get("ChargeMedian", np.nan)
-    for charge_state in range(1, 6):
-        computed[f"MS2-PrecZ-{charge_state}"] = charge_info.get(f"MS2-PrecZ-{charge_state}", np.nan)
-    computed["MS2-PrecZ-more"] = charge_info.get("MS2-PrecZ-more", np.nan)
+    computed["MS2_PrecursorCharge_Fractions"] = charge_info.get("MS2_PrecursorCharge_Fractions")
 
-    ma_info = mass_analyzer_info(exp)
-    activation_methods = activation_method_statistics(exp)
-    faims_info = faims_compensation_voltages(exp)
-    computed.update(ma_info)
-    computed.update(activation_methods)
-    computed.update(faims_info)
+    # Acquisition/instrument facts as single valid custom metrics (tables) with
+    # no fixed key slots, rather than dynamic per-method/per-analyzer keys.
+    computed["MassAnalyzers"] = mass_analyzer_info(exp)
+    computed["ActivationMethods"] = activation_method_statistics(exp)
+    computed.update(faims_compensation_voltages(exp))
 
+    # counts_by_type is already keyed by stable short names (TIC/BPC/SRM/SIM/XIC/
+    # SIC/Unknown), so the metric names map directly to METRIC_METADATA.
     for chrom_type, count in chrom_stats["counts_by_type"].items():
-        type_key = chrom_type.upper() if chrom_type != "unknown" else "Unknown"
-        computed[f"Chromatograms_{type_key}"] = count
+        computed[f"Chromatograms_{chrom_type}"] = count
     computed["Chromatograms_RT_Min"] = chrom_stats["rt_range_min"]
     computed["Chromatograms_RT_Max"] = chrom_stats["rt_range_max"]
 
-    desired_order = [
-        "NumberOfMSLevels",
-        "NumberOfSpectra_MS1",
-        "NumberOfSpectra_MS2",
-        "MS1_to_MS2_Ratio",
-        "ChromatographyDuration",
-        "NumberOfChromatograms",
-        "NumberOfChromatographicPeaks",
-        "NumberOfSpectralPeaks",
-        "Polarity_MS1_unknown",
-        "Polarity_MS2_unknown",
-        "ScanRate_MS1",
-        "ScanRate_MS2",
-        "FastestFrequency_MS1",
-        "FastestFrequency_MS2",
-        "AvgCycleTime_MS1",
-        "EmptyScans_MS1",
-        "EmptyScans_MS2",
-        "MzRange_MS1_Min",
-        "MzRange_MS1_Max",
-        "MzRange_MS2_Min",
-        "MzRange_MS2_Max",
-        "RtRange_MS1_Min",
-        "RtRange_MS1_Max",
-        "RtRange_MS2_Min",
-        "RtRange_MS2_Max",
-        "RT_MS1_Q1",
-        "RT_MS1_Q2",
-        "RT_MS1_Q3",
-        "RT_MS1_Q4",
-        "RT_MS2_Q1",
-        "RT_MS2_Q2",
-        "RT_MS2_Q3",
-        "RT_MS2_Q4",
-        "RT_MS1_IQR",
-        "RT_MS1_IQRRate",
-        "TIC_MS1_Area",
-        "TIC_MS2_Area",
-        "TIC_MS1_Area_RTQ1",
-        "TIC_MS1_Area_RTQ2",
-        "TIC_MS1_Area_RTQ3",
-        "MedianTIC_in_RT_MS1_IQR",
-        "TIC_MS1_MedianInHalfRange",
-        "RT_TIC_Q0",
-        "RT_TIC_Q1",
-        "RT_TIC_Q2",
-        "RT_TIC_Q3",
-        "RT_TIC_Q4",
-        "TIC_MS1_CV",
-        "TIC_MS2_CV",
-        "TIC_MS1_SignalJump10x_Count",
-        "TIC_MS1_SignalFall10x_Count",
-        "TIC_MS1_Change_Q2",
-        "TIC_MS1_Change_Q3",
-        "TIC_MS1_Change_Q4",
-        "TIC_MS1_Ratio_Q2",
-        "TIC_MS1_Ratio_Q3",
-        "TIC_MS1_Ratio_Q4",
-        "PeakDensity_MS1_Q1",
-        "PeakDensity_MS1_Q2",
-        "PeakDensity_MS1_Q3",
-        "PeakDensity_MS2_Q1",
-        "PeakDensity_MS2_Q2",
-        "PeakDensity_MS2_Q3",
-        "MS1_PeakType_Annotated",
-        "MS1_PeakType_Estimated",
-        "MS2_PeakType_Annotated",
-        "MS2_PeakType_Estimated",
-        "BasePeak_MS1_Mean",
-        "BasePeak_MS2_Mean",
-        "BasePeak_All_Max",
-        "PrecursorMz_MS2_Median",
-        "ChargeMin",
-        "ChargeMax",
-        "ChargeMean",
-        "ChargeMedian",
-        "ChargeRatio_3over2",
-        "ChargeRatio_4over2",
-        "MS2-PrecZ-1",
-        "MS2-PrecZ-2",
-        "MS2-PrecZ-3",
-        "MS2-PrecZ-4",
-        "MS2-PrecZ-5",
-        "MS2-PrecZ-more",
-        "PrecursorIntensity_Q1",
-        "PrecursorIntensity_Q2",
-        "PrecursorIntensity_Q3",
-        "PrecursorIntensity_Mean",
-        "PrecursorIntensity_Sd",
-        "ExtentPrecursorIntensity_95over5_MS2",
-        "MS2_ActivationMethod_0",
-        "Chromatograms_RT_Min",
-        "Chromatograms_RT_Max",
-    ]
+    desired_order = METRIC_ORDER
 
     ordered_metrics: Dict[str, Any] = {}
     remaining_metrics = dict(computed)
@@ -2372,6 +2718,53 @@ def extract_instrument_metadata(exp: oms.MSExperiment) -> Dict[str, str]:
 # -------------------------------------------------------------------------
 # Build mzQC with accessions
 # -------------------------------------------------------------------------
+import re as _re
+
+# PSI-MS CV version rawQC's MS:* accessions are taken from. Update alongside the
+# accessions; recorded in the generated file rather than a stale hard-coded value.
+PSI_MS_CV_VERSION = "4.1.257"
+
+# Local CV for rawQC custom metrics that have no PSI-MS accession. Every emitted
+# quality metric must carry an accession matching ^[A-Z]+:[A-Z0-9]+$ (mzQC
+# schema); custom metrics use a deterministic LOCAL:* accession from this CV.
+_LOCAL_CV = qc.ControlledVocabulary(
+    name="rawQC local quality metrics",
+    version="1",
+    uri="https://github.com/bigbio/rawQC",
+)
+
+# Instrument-metadata keys with a well-defined PSI-MS accession; others use LOCAL.
+_INSTRUMENT_CV_ACCESSIONS = {
+    "Instrument model name": ("MS:1000031", "instrument model"),
+    "Software": ("MS:1000531", "software"),
+}
+
+
+def _local_accession(name: str) -> str:
+    """Deterministic schema-valid LOCAL accession for a custom metric name."""
+    suffix = _re.sub(r"[^A-Z0-9]", "", name.upper())
+    return f"LOCAL:{suffix or 'UNNAMED'}"
+
+
+def _jsonify_value(v: Any) -> Any:
+    """Coerce a metric value to a JSON-serialisable form (scalar/array/table)."""
+    def _clean(x):
+        if x is None or (isinstance(x, float) and not np.isfinite(x)):
+            return None
+        return x
+
+    if v is None or (isinstance(v, float) and not np.isfinite(v)):
+        return None
+    if isinstance(v, (int, float, str)):
+        return v
+    if isinstance(v, (list, tuple)):
+        return [_clean(x) for x in v]
+    if isinstance(v, dict):
+        return {k: ([_clean(x) for x in col] if isinstance(col, (list, tuple)) else _clean(col))
+                for k, col in v.items()}
+    return str(v)
+
+
 def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
     """
     Build mzQC JSON from multiple runs.
@@ -2393,13 +2786,16 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
     )
     cv_ms = qc.ControlledVocabulary(
         name="Proteomics Standards Initiative Mass Spectrometry Ontology",
-        version="4.1.7",
+        version=PSI_MS_CV_VERSION,
         uri="https://github.com/HUPO-PSI/psi-ms-CV/blob/master/psi-ms.obo"
     )
 
+    # AnalysisSoftware is a CV term and must carry a valid accession; use the
+    # generic PSI-MS "software" term (MS:1000531).
     anso = qc.AnalysisSoftware(
+        accession="MS:1000531",
         name="pyOpenMS",
-        version="3.x",
+        version=str(getattr(oms, "__version__", "3.x")),
         uri="https://www.openms.de",
         description="OpenMS Python bindings used for ID-free QC metric computation and metadata extraction"
     )
@@ -2412,9 +2808,20 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
         metrics_dict = run_info['metrics']
         instrument_metadata = run_info['instrument_metadata']
 
+        # Instrument/input metadata belongs in the metadata structure, not in
+        # qualityMetrics: attach it as fileProperties (CvParameters) of the input.
+        file_properties = []
+        for k, v in instrument_metadata.items():
+            if v is None or v == "":
+                continue
+            acc, cv_name = _INSTRUMENT_CV_ACCESSIONS.get(k, (_local_accession(k), k))
+            file_properties.append(qc.CvParameter(
+                accession=acc, name=cv_name, value=_jsonify_value(v)))
+
         infi = qc.InputFile(name=input_name,
                             location=mzml_file,
-                            fileFormat=qc.CvParameter(accession="MS:1000584", name="mzML format"))
+                            fileFormat=qc.CvParameter(accession="MS:1000584", name="mzML format"),
+                            fileProperties=file_properties)
 
         meta = qc.MetaDataParameters(
             inputFiles=[infi],
@@ -2424,32 +2831,18 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
 
         qmetrics = []
         for k, v in metrics_dict.items():
-            # ensure scalar JSON value
-            if v is None or (isinstance(v, float) and not np.isfinite(v)):
-                val = None
-            elif isinstance(v, (int, float, str)):
-                val = v
-            else:
-                val = str(v)
-
-            # Fetch combined metadata (accession + description) for each QC metric
             metric_meta = METRIC_METADATA.get(k, {})
-            description = metric_meta.get("description") or "ID-free QC metric (MsQuality Spectra metrics translated to pyOpenMS)"
-            accession = metric_meta.get("accession")
+            description = metric_meta.get("description") or "rawQC ID-free QC metric"
+            # Every emitted metric must have a valid accession + name. Use the
+            # PSI-MS accession where declared; otherwise a deterministic LOCAL:*
+            # accession backed by the rawQC local CV (custom metric).
+            accession = metric_meta.get("accession") or _local_accession(k)
 
             qmetrics.append(qc.QualityMetric(
                 name=k,
-                accession=accession,  # include CV accession where known
-                value=val,
+                accession=accession,
+                value=_jsonify_value(v),
                 description=description
-            ))
-
-        # add descriptive instrument / LC info
-        for k, v in instrument_metadata.items():
-            qmetrics.append(qc.QualityMetric(
-                name=f"Instrument {k}",
-                value=str(v),
-                description="Extracted instrument metadata"
             ))
 
         rq = qc.RunQuality(metadata=meta, qualityMetrics=qmetrics)
@@ -2460,9 +2853,9 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
         creationDate=datetime.now().isoformat(),
         runQualities=run_qualities,
         setQualities=[],
-        controlledVocabularies=[cv_qc, cv_ms]
+        controlledVocabularies=[cv_qc, cv_ms, _LOCAL_CV]
     )
-    
+
     json_str = json.dumps(json.loads(qc.JsonSerialisable.to_json(mzqc_obj)), indent=2)
     return json_str
 
@@ -2539,6 +2932,16 @@ def parse_mzqc_metrics(json_str: str) -> Tuple[List[str], Dict[str, Dict[str, An
             prev_qc_keys = set(qc_metrics_dict.keys())
             prev_instr_keys = set(instrument_metrics_dict.keys())
 
+            # Instrument/input metadata now lives in the metadata structure as
+            # inputFile fileProperties, not as quality metrics.
+            file_properties = (input_files[0].get('fileProperties') or []) if input_files else []
+            for prop in file_properties:
+                clean_name = prop.get('name', '')
+                if clean_name not in instrument_metrics_dict:
+                    instrument_metrics_dict[clean_name] = [format_value(None)] * run_idx
+                instrument_metrics_dict[clean_name].append(format_value(prop.get('value')))
+                seen_instr_this_run.add(clean_name)
+
             for metric in metrics:
                 name = metric['name']
                 value = metric.get('value')
@@ -2547,26 +2950,17 @@ def parse_mzqc_metrics(json_str: str) -> Tuple[List[str], Dict[str, Dict[str, An
 
                 formatted_value = format_value(value)
 
-                if name.startswith('Instrument '):
-                    clean_name = name[11:]
-                    if clean_name not in instrument_metrics_dict:
-                        # First time we see this instrument metric -> pad previous runs
-                        instrument_metrics_dict[clean_name] = [format_value(None)] * run_idx
-                    instrument_metrics_dict[clean_name].append(formatted_value)
-                    seen_instr_this_run.add(clean_name)
-
-                else:
-                    # QC metrics - store with accession and description
-                    if name not in qc_metrics_dict:
-                        # First time we see this metric -> pad previous runs
-                        qc_metrics_dict[name] = {
-                            'values': [format_value(None)] * run_idx,
-                            'accession': accession,
-                            'description': description
-                        }
-                    # If we already have metadata, keep the first occurrence's accession/description
-                    qc_metrics_dict[name]['values'].append(formatted_value)
-                    seen_qc_this_run.add(name)
+                # QC metrics - store with accession and description
+                if name not in qc_metrics_dict:
+                    # First time we see this metric -> pad previous runs
+                    qc_metrics_dict[name] = {
+                        'values': [format_value(None)] * run_idx,
+                        'accession': accession,
+                        'description': description
+                    }
+                # If we already have metadata, keep the first occurrence's accession/description
+                qc_metrics_dict[name]['values'].append(formatted_value)
+                seen_qc_this_run.add(name)
 
             # Append placeholder for any previously known metrics not present in this run
             missing_qc = prev_qc_keys - seen_qc_this_run
@@ -2692,6 +3086,61 @@ def write_metrics_tsv(json_str: str, tsv_path: str) -> None:
         df.to_csv(fh, sep="\t", index=False)
 
 
+def _flatten_metric_for_heatmap(name: str, value: Any) -> List[Tuple[str, float]]:
+    """
+    Expand a metric value into ``(row_label, float)`` pairs for the heatmap.
+
+    Scalars map to a single row. n-tuples (lists) are expanded to ``name[i]``
+    rows, and tables (dicts of columns) to ``name.column[label]`` rows using the
+    first all-string column as the row label. Non-numeric entries are skipped, so
+    tuple/table metrics (charge fractions, RT quantiles, ranges, activation/
+    analyzer tables) are visualized instead of silently dropped.
+    """
+    def _num(x: Any) -> Optional[float]:
+        if isinstance(x, bool) or x is None:
+            return None
+        try:
+            f = float(x)
+        except (TypeError, ValueError):
+            return None
+        return f if np.isfinite(f) else np.nan
+
+    rows: List[Tuple[str, float]] = []
+    if value is None or isinstance(value, str):
+        return rows
+    if isinstance(value, bool):
+        return rows
+    if isinstance(value, (int, float)):
+        f = _num(value)
+        if f is not None:
+            rows.append((name, f))
+    elif isinstance(value, (list, tuple)):
+        for i, x in enumerate(value):
+            f = _num(x)
+            if f is not None:
+                rows.append((f"{name}[{i}]", f))
+    elif isinstance(value, dict):
+        labels = None
+        for col, vals in value.items():
+            if isinstance(vals, (list, tuple)) and vals and all(isinstance(v, str) for v in vals):
+                labels = list(vals)
+                break
+        for col, vals in value.items():
+            if not isinstance(vals, (list, tuple)):
+                continue
+            if vals and all(isinstance(v, str) for v in vals):
+                continue  # label / other string column, not a numeric series
+            if list(vals) == list(range(len(vals))):
+                continue  # a pure positional index column (0,1,...,n-1)
+            for i, x in enumerate(vals):
+                f = _num(x)
+                if f is None:
+                    continue
+                lbl = labels[i] if (labels is not None and i < len(labels)) else str(i)
+                rows.append((f"{name}.{col}[{lbl}]", f))
+    return rows
+
+
 # -------------------------------------------------------------------------
 # Core function for library usage
 # -------------------------------------------------------------------------
@@ -2815,30 +3264,27 @@ def calculate_metrics(
 
     # Generate plot if requested
     if generate_plot:
-        # Re-parse the mzQC JSON to get the structured data
-        run_labels, qc_metrics_dict, instrument_metrics_dict = parse_mzqc_metrics(json_str)
+        # Build heatmap rows directly from the structured mzQC values so that
+        # n-tuples and tables (charge fractions, RT quantiles, ranges, analyzer/
+        # activation tables) are expanded into per-element rows rather than
+        # dropped because a list/dict cannot occupy a single heatmap cell.
+        mzqc_data = json.loads(json_str)
+        run_qualities = mzqc_data["mzQC"]["runQualities"]
+        num_runs = len(run_qualities)
 
-        # Prepare data for heatmap
-        all_metrics_for_heatmap = {}
+        run_labels = []
+        for rq in run_qualities:
+            input_files = rq["metadata"].get("inputFiles", [])
+            run_labels.append(input_files[0].get("name") if input_files
+                              else rq["metadata"].get("label", "run"))
 
-        # Number of runs
-        num_runs = len(run_labels)
+        all_metrics_for_heatmap: Dict[str, List[float]] = {}
+        for run_idx, rq in enumerate(run_qualities):
+            for qm in rq["qualityMetrics"]:
+                for row_label, fval in _flatten_metric_for_heatmap(qm["name"], qm.get("value")):
+                    all_metrics_for_heatmap.setdefault(row_label, [np.nan] * num_runs)[run_idx] = fval
 
-        # Add QC metrics
-        for metric_name, metric_data in qc_metrics_dict.items():
-            # Convert formatted values back to numeric where possible, use NaN otherwise
-            values = []
-            for val_str in metric_data['values']:
-                try:
-                    values.append(float(val_str))
-                except (ValueError, TypeError):
-                    values.append(np.nan)
-            # Ensure list has the same length as number of runs, fill with NaN if shorter
-            while len(values) < num_runs:
-                values.append(np.nan)
-            all_metrics_for_heatmap[metric_name] = values
-
-        # Create a DataFrame
+        # Create a DataFrame (rows = metrics, columns = runs)
         df_heatmap = pd.DataFrame(all_metrics_for_heatmap, index=run_labels).T
 
         # Drop rows where all values are NaN
