@@ -23,7 +23,8 @@ def _rich_exp():
     for i in range(6):
         m1 = oms.MSSpectrum(); m1.setRT(float(i)); m1.setMSLevel(1)
         m1.set_peaks((np.arange(100.0, 115.0), np.full(15, 5.0)))
-        m1.setMetaValue("FAIMS_CV", -45.0 if i % 2 == 0 else -55.0)
+        m1.setDriftTime(-45.0 if i % 2 == 0 else -55.0)  # FAIMS CV storage (see #23)
+        m1.setDriftTimeUnit(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
         exp.addSpectrum(m1)
         m2 = oms.MSSpectrum(); m2.setRT(i + 0.3); m2.setMSLevel(2)
         m2.set_peaks((np.array([100.0]), np.array([5.0])))
