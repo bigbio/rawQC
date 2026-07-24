@@ -311,11 +311,11 @@ METRIC_METADATA = {
     },
     "ScanRate_MS1": {
         "accession": None,
-        "description": "MS1 scan rate (scans per minute)."
+        "description": "MS1 scan rate (scans per minute) over the MS1 acquisition span."
     },
     "ScanRate_MS2": {
         "accession": None,
-        "description": "MS2 scan rate (scans per minute)."
+        "description": "MS2 scan rate (scans per minute) over the MS2 acquisition span."
     },
     "MS1_to_MS2_Ratio": {
         "accession": None,
@@ -808,6 +808,10 @@ def chromatography_duration(exp: oms.MSExperiment) -> float:
         >>> duration = chromatography_duration(exp)
     """
     rts_all = _rts(list(exp))
+    # Filter non-finite retention times: a single NaN/inf RT would otherwise make
+    # the duration (and every metric derived from it) non-finite. This matches
+    # the docstring and MsQuality's na.rm=TRUE behavior.
+    rts_all = rts_all[np.isfinite(rts_all)]
     return float(np.max(rts_all) - np.min(rts_all)) if rts_all.size else np.nan
 
 def rt_over_ms_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> List[float]:
@@ -913,6 +917,35 @@ def tic_quartile_to_quartile_log_ratio(exp: oms.MSExperiment, ms_level: int = 1,
             ratios = np.array([q2/q1, q3/q2, q4/q3], dtype=float)
         logs = np.log(ratios)
     return [float(x) if np.isfinite(x) else np.nan for x in logs]
+
+def scan_rate(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+    """
+    Level-specific scan rate in scans per minute.
+
+    The denominator is the acquisition span of the requested MS level itself
+    (max minus min finite retention time for that level), not one combined
+    MS1/MS2 run duration. Using the combined duration misreports a level's rate
+    when one level starts later or ends earlier than the other.
+
+    Non-finite retention times are removed. Returns NaN when the level has fewer
+    than two finite retention times or a zero-length span (rate undefined).
+
+    Args:
+        exp: MSExperiment object
+        ms_level: int, MS level to analyze (default: 1)
+
+    Returns:
+        float: scans per minute over that MS level's acquisition span, or NaN
+    """
+    rts = _rts(_filter_by_mslevel(exp, ms_level))
+    rts = rts[np.isfinite(rts)]
+    if rts.size < 2:
+        return np.nan
+    span_min = (float(np.max(rts)) - float(np.min(rts))) / 60.0
+    if span_min <= 0:
+        return np.nan
+    return float(rts.size / span_min)
+
 
 def number_spectra(exp: oms.MSExperiment, ms_level: int = 1) -> int:
     """
@@ -2189,14 +2222,14 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     ms1_specs = _filter_by_mslevel(exp, 1)
     ms2_specs = _filter_by_mslevel(exp, 2)
 
-    rt_ms1 = _rts(ms1_specs)
-    rt_ms2 = _rts(ms2_specs)
     tic_ms1 = _ion_counts(ms1_specs)
     tic_ms2 = _ion_counts(ms2_specs)
 
-    total_time_min = ((np.max(np.r_[rt_ms1, rt_ms2]) - np.min(np.r_[rt_ms1, rt_ms2])) / 60.0) if (rt_ms1.size or rt_ms2.size) else 0
-    scan_rate_ms1 = len(ms1_specs) / total_time_min if total_time_min > 0 else np.nan
-    scan_rate_ms2 = len(ms2_specs) / total_time_min if total_time_min > 0 else np.nan
+    # Level-specific scan rates use each level's own acquisition span (see
+    # scan_rate); the previous combined MS1+MS2 duration misreported a level's
+    # rate whenever the two levels had different RT spans.
+    scan_rate_ms1 = scan_rate(exp, 1)
+    scan_rate_ms2 = scan_rate(exp, 2)
 
     density_ms1 = peak_density_quantiles(exp, 1)
     density_ms2 = peak_density_quantiles(exp, 2)
