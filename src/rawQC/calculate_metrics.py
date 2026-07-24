@@ -521,15 +521,12 @@ METRIC_METADATA = {
     },
 
 
-    # Metrics lacking PSI:MS descriptions
     "TIC_MS2_Area": {
         "accession": "MS:4000030",
         "description": "Sum of all MS2 TIC values (area under the total ion chromatogram)."
     },
-    "MS_Run_Duration": {
-        "accession": "MS:4000067",
-        "description": None
-    },
+    # NOTE: MS_Run_Duration (MS:4000067) was registered here but never computed
+    # (a dead entry with a null description); removed in issue #44.
 }
 
 # Derived metadata lookups for convenience and validation
@@ -538,6 +535,150 @@ METRIC_ACCESSIONS = {k: v["accession"] for k, v in METRIC_METADATA.items() if v[
 METRIC_DESCRIPTIONS = {k: v["description"] for k, v in METRIC_METADATA.items() if v["description"] is not None}
 MISSING_METRIC_ACCESSIONS = [k for k, v in METRIC_METADATA.items() if v["accession"] is None]
 MISSING_METRIC_DESCRIPTIONS = [k for k, v in METRIC_METADATA.items() if v["description"] is None]
+
+# Authoritative presentation order for the static metrics. Dynamic metric
+# families (chromatogram types, activation methods, analyzers, peak types, FAIMS)
+# are appended in computation order after these. Kept as a single source of truth
+# so ordering and metadata cannot drift apart (see validate_metric_registry).
+METRIC_ORDER = [
+    "NumberOfMSLevels",
+    "NumberOfSpectra_MS1",
+    "NumberOfSpectra_MS2",
+    "MS1_to_MS2_Ratio",
+    "ChromatographyDuration",
+    "NumberOfChromatograms",
+    "NumberOfChromatographicPeaks",
+    "NumberOfSpectralPeaks",
+    "Polarity_MS1_unknown",
+    "Polarity_MS2_unknown",
+    "ScanRate_MS1",
+    "ScanRate_MS2",
+    "FastestFrequency_MS1",
+    "FastestFrequency_MS2",
+    "AvgCycleTime_MS1",
+    "EmptyScans_MS1",
+    "EmptyScans_MS2",
+    "MzRange_MS1_Min",
+    "MzRange_MS1_Max",
+    "MzRange_MS2_Min",
+    "MzRange_MS2_Max",
+    "RtRange_MS1_Min",
+    "RtRange_MS1_Max",
+    "RtRange_MS2_Min",
+    "RtRange_MS2_Max",
+    "RT_MS1_Q1",
+    "RT_MS1_Q2",
+    "RT_MS1_Q3",
+    "RT_MS1_Q4",
+    "RT_MS2_Q1",
+    "RT_MS2_Q2",
+    "RT_MS2_Q3",
+    "RT_MS2_Q4",
+    "RT_MS1_IQR",
+    "RT_MS1_IQRRate",
+    "TIC_MS1_Area",
+    "TIC_MS2_Area",
+    "TIC_MS1_Area_RTQ1",
+    "TIC_MS1_Area_RTQ2",
+    "TIC_MS1_Area_RTQ3",
+    "MedianTIC_in_RT_MS1_IQR",
+    "TIC_MS1_MedianInHalfRange",
+    "RT_TIC_Q0",
+    "RT_TIC_Q1",
+    "RT_TIC_Q2",
+    "RT_TIC_Q3",
+    "RT_TIC_Q4",
+    "TIC_MS1_CV",
+    "TIC_MS2_CV",
+    "TIC_MS1_SignalJump10x_Count",
+    "TIC_MS1_SignalFall10x_Count",
+    "TIC_MS1_Change_Q2",
+    "TIC_MS1_Change_Q3",
+    "TIC_MS1_Change_Q4",
+    "TIC_MS1_Ratio_Q2",
+    "TIC_MS1_Ratio_Q3",
+    "TIC_MS1_Ratio_Q4",
+    "PeakDensity_MS1_Q1",
+    "PeakDensity_MS1_Q2",
+    "PeakDensity_MS1_Q3",
+    "PeakDensity_MS2_Q1",
+    "PeakDensity_MS2_Q2",
+    "PeakDensity_MS2_Q3",
+    "MS1_PeakType_Annotated",
+    "MS1_PeakType_Estimated",
+    "MS2_PeakType_Annotated",
+    "MS2_PeakType_Estimated",
+    "BasePeak_MS1_Mean",
+    "BasePeak_MS2_Mean",
+    "BasePeak_All_Max",
+    "PrecursorMz_MS2_Median",
+    "ChargeMin",
+    "ChargeMax",
+    "ChargeMean",
+    "ChargeMedian",
+    "ChargeRatio_3over2",
+    "ChargeRatio_4over2",
+    "MS2-PrecZ-1",
+    "MS2-PrecZ-2",
+    "MS2-PrecZ-3",
+    "MS2-PrecZ-4",
+    "MS2-PrecZ-5",
+    "MS2-PrecZ-more",
+    "PrecursorIntensity_Q1",
+    "PrecursorIntensity_Q2",
+    "PrecursorIntensity_Q3",
+    "PrecursorIntensity_Mean",
+    "PrecursorIntensity_Sd",
+    "ExtentPrecursorIntensity_95over5_MS2",
+    # NOTE: the stale "MS2_ActivationMethod_0" entry was removed (issue #44):
+    # activation-method keys are generated from method names, never "_0".
+    "Chromatograms_RT_Min",
+    "Chromatograms_RT_Max",
+]
+
+import re as _re_spec
+
+# Dynamic metric families: keys generated at runtime (one per chromatogram type,
+# activation method, mass analyzer, MS level, FAIMS field) rather than enumerated
+# statically. A computed key that matches one of these patterns is considered
+# covered by the specification even though it is not a fixed METRIC_METADATA key.
+_DYNAMIC_METRIC_PATTERNS = [
+    _re_spec.compile(r"^Chromatograms_[A-Za-z0-9 ]+$"),
+    _re_spec.compile(r"^MS\d+_ActivationMethod_.+$"),
+    _re_spec.compile(r"^MassAnalyzer_\d+_(Type|Resolution)$"),
+    _re_spec.compile(r"^MS\d+_PeakType_.+$"),
+    _re_spec.compile(r"^FAIMS_CV_.+$"),
+]
+
+
+def _is_dynamic_metric(name: str) -> bool:
+    return any(p.match(name) for p in _DYNAMIC_METRIC_PATTERNS)
+
+
+def validate_metric_registry(computed: Dict[str, Any]) -> Dict[str, List[str]]:
+    """
+    Validate a computed metric dict against the authoritative specification.
+
+    Returns a dict of problem categories to offending metric names:
+      * "uncovered": computed keys with neither a METRIC_METADATA entry nor a
+        matching dynamic-family pattern (a computed metric lacking metadata);
+      * "ordered_missing_metadata": METRIC_ORDER entries without a metadata entry;
+      * "ordered_not_computed": static (non-dynamic) METRIC_ORDER entries that the
+        run did not produce.
+
+    A test can assert every category is empty to catch registry/order/computation
+    drift.
+    """
+    uncovered = [k for k in computed
+                 if k not in METRIC_METADATA and not _is_dynamic_metric(k)]
+    ordered_missing_metadata = [k for k in METRIC_ORDER if k not in METRIC_METADATA]
+    ordered_not_computed = [k for k in METRIC_ORDER
+                            if k not in computed and not _is_dynamic_metric(k)]
+    return {
+        "uncovered": uncovered,
+        "ordered_missing_metadata": ordered_missing_metadata,
+        "ordered_not_computed": ordered_not_computed,
+    }
 
 
 # -------------------------------------------------------------------------
@@ -2309,100 +2450,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["Chromatograms_RT_Min"] = chrom_stats["rt_range_min"]
     computed["Chromatograms_RT_Max"] = chrom_stats["rt_range_max"]
 
-    desired_order = [
-        "NumberOfMSLevels",
-        "NumberOfSpectra_MS1",
-        "NumberOfSpectra_MS2",
-        "MS1_to_MS2_Ratio",
-        "ChromatographyDuration",
-        "NumberOfChromatograms",
-        "NumberOfChromatographicPeaks",
-        "NumberOfSpectralPeaks",
-        "Polarity_MS1_unknown",
-        "Polarity_MS2_unknown",
-        "ScanRate_MS1",
-        "ScanRate_MS2",
-        "FastestFrequency_MS1",
-        "FastestFrequency_MS2",
-        "AvgCycleTime_MS1",
-        "EmptyScans_MS1",
-        "EmptyScans_MS2",
-        "MzRange_MS1_Min",
-        "MzRange_MS1_Max",
-        "MzRange_MS2_Min",
-        "MzRange_MS2_Max",
-        "RtRange_MS1_Min",
-        "RtRange_MS1_Max",
-        "RtRange_MS2_Min",
-        "RtRange_MS2_Max",
-        "RT_MS1_Q1",
-        "RT_MS1_Q2",
-        "RT_MS1_Q3",
-        "RT_MS1_Q4",
-        "RT_MS2_Q1",
-        "RT_MS2_Q2",
-        "RT_MS2_Q3",
-        "RT_MS2_Q4",
-        "RT_MS1_IQR",
-        "RT_MS1_IQRRate",
-        "TIC_MS1_Area",
-        "TIC_MS2_Area",
-        "TIC_MS1_Area_RTQ1",
-        "TIC_MS1_Area_RTQ2",
-        "TIC_MS1_Area_RTQ3",
-        "MedianTIC_in_RT_MS1_IQR",
-        "TIC_MS1_MedianInHalfRange",
-        "RT_TIC_Q0",
-        "RT_TIC_Q1",
-        "RT_TIC_Q2",
-        "RT_TIC_Q3",
-        "RT_TIC_Q4",
-        "TIC_MS1_CV",
-        "TIC_MS2_CV",
-        "TIC_MS1_SignalJump10x_Count",
-        "TIC_MS1_SignalFall10x_Count",
-        "TIC_MS1_Change_Q2",
-        "TIC_MS1_Change_Q3",
-        "TIC_MS1_Change_Q4",
-        "TIC_MS1_Ratio_Q2",
-        "TIC_MS1_Ratio_Q3",
-        "TIC_MS1_Ratio_Q4",
-        "PeakDensity_MS1_Q1",
-        "PeakDensity_MS1_Q2",
-        "PeakDensity_MS1_Q3",
-        "PeakDensity_MS2_Q1",
-        "PeakDensity_MS2_Q2",
-        "PeakDensity_MS2_Q3",
-        "MS1_PeakType_Annotated",
-        "MS1_PeakType_Estimated",
-        "MS2_PeakType_Annotated",
-        "MS2_PeakType_Estimated",
-        "BasePeak_MS1_Mean",
-        "BasePeak_MS2_Mean",
-        "BasePeak_All_Max",
-        "PrecursorMz_MS2_Median",
-        "ChargeMin",
-        "ChargeMax",
-        "ChargeMean",
-        "ChargeMedian",
-        "ChargeRatio_3over2",
-        "ChargeRatio_4over2",
-        "MS2-PrecZ-1",
-        "MS2-PrecZ-2",
-        "MS2-PrecZ-3",
-        "MS2-PrecZ-4",
-        "MS2-PrecZ-5",
-        "MS2-PrecZ-more",
-        "PrecursorIntensity_Q1",
-        "PrecursorIntensity_Q2",
-        "PrecursorIntensity_Q3",
-        "PrecursorIntensity_Mean",
-        "PrecursorIntensity_Sd",
-        "ExtentPrecursorIntensity_95over5_MS2",
-        "MS2_ActivationMethod_0",
-        "Chromatograms_RT_Min",
-        "Chromatograms_RT_Max",
-    ]
+    desired_order = METRIC_ORDER
 
     ordered_metrics: Dict[str, Any] = {}
     remaining_metrics = dict(computed)
