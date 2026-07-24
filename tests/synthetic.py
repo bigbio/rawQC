@@ -72,7 +72,9 @@ def _spectrum(rt, level, mzs, intens, *, prec_mz=None, prec_int=None,
     if stype is not None:
         sp.setType(stype)
     if faims is not None:
-        sp.setMetaValue("FAIMS_CV", float(faims))
+        # OpenMS stores a FAIMS CV as drift time with the FAIMS unit (see #23).
+        sp.setDriftTime(float(faims))
+        sp.setDriftTimeUnit(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
     if level >= 2 and (prec_mz is not None or charge is not None or prec_int is not None):
         prec = oms.Precursor()
         if prec_mz is not None:
