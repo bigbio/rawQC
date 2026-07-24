@@ -64,3 +64,13 @@ def test_emitted_as_single_table_metric():
     val = tables[0]["value"]
     assert val["charge_state"] == ["1", "2", "3", "4", "5", ">=6", "unknown"]
     assert val["fraction"] == [0.0, 0.5, 0.25, 0.0, 0.0, 0.0, 0.25]
+
+
+def test_negative_charge_goes_to_unknown_and_sum_is_one():
+    # A non-physical negative charge must not silently vanish: it lands in the
+    # unknown bin so the fractions still sum to 1.0.
+    exp = _exp([2, -3, 0])  # one valid (2), one negative, one zero(unknown)
+    tbl = charge_metrics(exp, 2)["MS2_PrecursorCharge_Fractions"]
+    assert tbl["count"][1] == 1                    # z=2
+    assert tbl["count"][-1] == 2                    # negative + zero -> unknown
+    assert abs(sum(tbl["fraction"]) - 1.0) < 1e-12

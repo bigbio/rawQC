@@ -1742,7 +1742,11 @@ def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]
             int(np.sum(c == 4)),
             int(np.sum(c == 5)),
             int(np.sum(c >= 6)),
-            int(n_ms2 - c.size),  # missing / zero / unknown charge
+            # Unknown = every MS2 scan without a valid (>=1) charge: missing,
+            # zero, AND any non-physical negative charge. Basing this on the
+            # count of valid charges (not c.size) keeps the fractions summing to
+            # 1.0 even if a negative charge sneaks through.
+            int(n_ms2 - int(np.sum(c >= 1))),
         ]
         fractions = [float(n / n_ms2) for n in counts_by_bin]
     else:
