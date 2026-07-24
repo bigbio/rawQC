@@ -204,30 +204,10 @@ METRIC_METADATA = {
         "accession": None,
         "description": "The ratio of 4+ over 2+ MS2 precursor charge count."
     },
-    # MS2 precursor charge fractions
-    "MS2-PrecZ-1": {
+    # MS2 precursor charge fractions (one table, denominator = all MS2 scans)
+    "MS2_PrecursorCharge_Fractions": {
         "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 1+.",
-    },
-    "MS2-PrecZ-2": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 2+.",
-    },
-    "MS2-PrecZ-3": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 3+.",
-    },
-    "MS2-PrecZ-4": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 4+.",
-    },
-    "MS2-PrecZ-5": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 5+.",
-    },
-    "MS2-PrecZ-more": {
-        "accession": "MS:4000063",
-        "description": "Fraction of MS/MS precursors with charge state 5+ or higher.",
+        "description": "Fraction of MS2 precursors per charge state (1, 2, 3, 4, 5, >=6, and unknown/missing) as a table with charge_state, count and fraction columns; fractions are over all MS2 scans and sum to 1.0.",
     },
 
     # Custom metrics (non-PSI:MS)
@@ -1930,9 +1910,41 @@ def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]
         >>> print(metrics['ChargeMean'])
     """
     specs = _filter_by_mslevel(exp, ms_level)
+    n_ms2 = len(specs)
     _, _, charges = _precursor_values(specs)
+    # Known charge states (>=1); unknown = missing, zero, or non-physical
+    # negative charge, kept as its own bin. QuaMeter stores unknown charge as 0
+    # and divides every bin by ALL MS2 scans, so the fractions have the reference
+    # denominator and sum to 1.0.
     c = charges[~np.isnan(charges)].astype(int)
-    out = {}
+    out: Dict[str, Any] = {}
+
+    # Charge-state fraction table (MS:4000063), denominator = all MS2 scans.
+    labels = ["1", "2", "3", "4", "5", ">=6", "unknown"]
+    if n_ms2 > 0:
+        counts_by_bin = [
+            int(np.sum(c == 1)),
+            int(np.sum(c == 2)),
+            int(np.sum(c == 3)),
+            int(np.sum(c == 4)),
+            int(np.sum(c == 5)),
+            int(np.sum(c >= 6)),
+            # Unknown = every MS2 scan without a valid (>=1) charge: missing,
+            # zero, AND any non-physical negative charge. Basing this on the
+            # count of valid charges (not c.size) keeps the fractions summing to
+            # 1.0 even if a negative charge sneaks through.
+            int(n_ms2 - int(np.sum(c >= 1))),
+        ]
+        fractions = [float(n / n_ms2) for n in counts_by_bin]
+    else:
+        counts_by_bin = [0, 0, 0, 0, 0, 0, 0]
+        fractions = [np.nan] * 7
+    out["MS2_PrecursorCharge_Fractions"] = {
+        "charge_state": list(labels),
+        "count": counts_by_bin,
+        "fraction": fractions,
+    }
+
     if c.size == 0:
         out["ChargeMin"] = np.nan
         out["ChargeMax"] = np.nan
@@ -1940,15 +1952,9 @@ def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]
         out["ChargeRatio_4over2"] = np.nan
         out["ChargeMean"] = np.nan
         out["ChargeMedian"] = np.nan
-        out["MS2-PrecZ-1"] = np.nan
-        out["MS2-PrecZ-2"] = np.nan
-        out["MS2-PrecZ-3"] = np.nan
-        out["MS2-PrecZ-4"] = np.nan
-        out["MS2-PrecZ-5"] = np.nan
-        out["MS2-PrecZ-more"] = np.nan
         return out
 
-    # Min and Max charge states
+    # Min and Max charge states (over known charges)
     out["ChargeMin"] = int(np.min(c))
     out["ChargeMax"] = int(np.max(c))
 
@@ -1966,16 +1972,6 @@ def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]
     else:
         out["ChargeRatio_4over2"] = np.nan
 
-    total_precursors = int(c.size)
-    if total_precursors > 0:
-        for charge_state in range(1, 6):
-            out[f"MS2-PrecZ-{charge_state}"] = float(table.get(charge_state, 0) / total_precursors)
-        higher_charge = sum(count for ch, count in table.items() if ch >= 6)
-        out["MS2-PrecZ-more"] = float(higher_charge / total_precursors)
-    else:
-        for charge_state in range(1, 6):
-            out[f"MS2-PrecZ-{charge_state}"] = np.nan
-        out["MS2-PrecZ-more"] = np.nan
     out["ChargeMean"] = float(np.mean(c))
     out["ChargeMedian"] = float(np.median(c))
     return out
@@ -2527,9 +2523,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["ChargeRatio_4over2"] = charge_info.get("ChargeRatio_4over2", np.nan)
     computed["ChargeMean"] = charge_info.get("ChargeMean", np.nan)
     computed["ChargeMedian"] = charge_info.get("ChargeMedian", np.nan)
-    for charge_state in range(1, 6):
-        computed[f"MS2-PrecZ-{charge_state}"] = charge_info.get(f"MS2-PrecZ-{charge_state}", np.nan)
-    computed["MS2-PrecZ-more"] = charge_info.get("MS2-PrecZ-more", np.nan)
+    computed["MS2_PrecursorCharge_Fractions"] = charge_info.get("MS2_PrecursorCharge_Fractions")
 
     ma_info = mass_analyzer_info(exp)
     activation_methods = activation_method_statistics(exp)
@@ -2609,12 +2603,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "ChargeMedian",
         "ChargeRatio_3over2",
         "ChargeRatio_4over2",
-        "MS2-PrecZ-1",
-        "MS2-PrecZ-2",
-        "MS2-PrecZ-3",
-        "MS2-PrecZ-4",
-        "MS2-PrecZ-5",
-        "MS2-PrecZ-more",
+        "MS2_PrecursorCharge_Fractions",
         "PrecursorIntensity_Q1",
         "PrecursorIntensity_Q2",
         "PrecursorIntensity_Q3",
