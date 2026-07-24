@@ -133,12 +133,12 @@ def test_peak_type_and_activation_and_analyzer_paths():
     exp = _experiment_with_two_analyzers()
     pt = peak_type_statistics(exp)
     assert pt["MS1_PeakType_Annotated"] == "profile"
+    # activation methods and analyzers are reported as tables (issue #42).
     am = activation_method_statistics(exp)
-    assert am.get("MS2_ActivationMethod_HCD") == 6
+    assert am["method"] == ["HCD"] and am["count"] == [6] and am["ms_level"] == [2]
     ma = mass_analyzer_info(exp)
-    assert ma["MassAnalyzer_0_Type"] == "ORBITRAP"
-    assert ma["MassAnalyzer_1_Type"] == "IT"
-    assert ma["MassAnalyzer_0_Resolution"] == 60000.0
+    assert ma["type"] == ["ORBITRAP", "IT"]
+    assert ma["resolution"] == [60000.0, None]
 
 
 def test_compute_qc_metrics_runs_end_to_end():
@@ -148,11 +148,10 @@ def test_compute_qc_metrics_runs_end_to_end():
     # Polarity resolved (not silently 'unknown').
     assert metrics["Polarity_MS1_positive"] == 6
     assert metrics["Polarity_MS1_unknown"] == 0
-    # FAIMS collected.
+    # FAIMS collected (range modelled as [min, max]; issue #42).
     assert metrics["FAIMS_CV_Count"] == 2
-    assert metrics["FAIMS_CV_Min"] == -55.0
-    assert metrics["FAIMS_CV_Max"] == -45.0
-    # Analyzer info present.
-    assert metrics["MassAnalyzer_0_Type"] == "ORBITRAP"
+    assert metrics["FAIMS_CV_Range"] == [-55.0, -45.0]
+    # Analyzer info present as a table.
+    assert metrics["MassAnalyzers"]["type"] == ["ORBITRAP", "IT"]
     # Sanity: a core numeric metric is finite.
     assert math.isfinite(metrics["ChromatographyDuration"])

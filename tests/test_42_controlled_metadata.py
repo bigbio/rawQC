@@ -43,8 +43,9 @@ def _ms2(rt):
 
 def _exp():
     exp = oms.MSExperiment()
+    faims_cycle = [-45.0, -50.0, -55.0]
     for i in range(6):
-        exp.addSpectrum(_ms1(10 + i, faims=-45.0 if i % 2 == 0 else -55.0))
+        exp.addSpectrum(_ms1(10 + i, faims=faims_cycle[i % 3]))
         exp.addSpectrum(_ms2(10.5 + i))
     inst = exp.getInstrument()
     a0 = oms.MassAnalyzer(); a0.setType(oms.MassAnalyzer.AnalyzerType.ORBITRAP); a0.setResolution(60000.0)
@@ -71,9 +72,11 @@ def test_activation_table():
 
 def test_faims_values_range_count():
     f = faims_compensation_voltages(_exp())
-    assert f["FAIMS_CV_Count"] == 2
-    assert f["FAIMS_CV_Values"] == [-55.0, -45.0]
+    assert f["FAIMS_CV_Count"] == 3
+    # distinct sorted values differ from the [min, max] range (3 values)
+    assert f["FAIMS_CV_Values"] == [-55.0, -50.0, -45.0]
     assert f["FAIMS_CV_Range"] == [-55.0, -45.0]
+    assert f["FAIMS_CV_Values"] != f["FAIMS_CV_Range"]
 
 
 def test_polarity_accessions_not_reused():
