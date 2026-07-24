@@ -1254,9 +1254,10 @@ def precursor_intensity_stats(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[
         "PrecursorIntensity_Sd": float(np.std(preI, ddof=1)) if preI.size > 1 else np.nan,
     }
 
-def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2) -> float:
+def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2,
+                        accepted_native_ids: Optional[set] = None) -> float:
     """
-    MS2 precursor median m/z of identified quantification data points (MS:4000152).
+    ID-free proxy for the median precursor m/z of identified data points (MS:4000152).
 
     MS:4000152:
     "Median m/z value for MS2 precursors of all quantification data points after
@@ -1276,13 +1277,17 @@ def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2) -> float:
         relationship: has_units MS:1000040 ! m/z
 
     Note:
-        This will calculate the precursor median m/z of all spectra. If the calculation
-        needs to be done according to MS:4000152, the spectra should be filtered to
-        identified spectra beforehand.
+        MS:4000152 is an ID-based term ("all quantification data points after
+        user-defined acceptance criteria are applied"). Without identifications
+        rawQC computes the median precursor m/z over ALL MS2 precursors, which is
+        an ID-free proxy and is emitted WITHOUT the MS:4000152 accession. Pass
+        ``accepted_native_ids`` (accepted spectrum native IDs) to restrict the
+        computation to identified spectra and reproduce the ID-based definition.
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 2)
+        accepted_native_ids: optional set of accepted spectrum native IDs
 
     Returns:
         float: Median precursor m/z
@@ -1291,6 +1296,9 @@ def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2) -> float:
         >>> median_mz = median_precursor_mz(exp, ms_level=2)
     """
     specs = _filter_by_mslevel(exp, ms_level)
+    if accepted_native_ids is not None:
+        wanted = set(accepted_native_ids)
+        specs = [s for s in specs if s.getNativeID() in wanted]
     preMz, _, _ = _precursor_values(specs)
     return _nanmedian(preMz)
 
@@ -1459,9 +1467,10 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     q4 = tic[(rts > qs[3]) & (rts <= qs[4])]
     return [float(np.nansum(q)) for q in (q1, q2, q3, q4)]
 
-def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int = 2) -> float:
+def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int = 2,
+                                          accepted_native_ids: Optional[set] = None) -> float:
     """
-    Extent of identified MS2 precursor intensity (MS:4000157).
+    ID-free proxy for the extent of identified MS2 precursor intensity (MS:4000157).
 
     MS:4000157:
     "Ratio of 95th over 5th percentile of MS2 precursor intensity for all
@@ -1485,12 +1494,17 @@ def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int =
         relationship: has_metric_category MS:4000022 ! MS2 metric
 
     Note:
-        Computed over all MS2 precursors (no ID info in plain mzML).
-        Precursor intensity values that are NA are removed.
+        MS:4000157 is an ID-based term (MS1-3A) whose reference implementation
+        (SMAQC) is based on identified-peptide XIC peak-apex intensities. Without
+        identifications rawQC computes the 95/5 ratio over ALL MS2 precursor
+        intensities, which is an ID-free proxy and is emitted WITHOUT the
+        MS:4000157 accession. Pass ``accepted_native_ids`` to restrict to
+        identified spectra. Precursor intensity values that are NA are removed.
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 2)
+        accepted_native_ids: optional set of accepted spectrum native IDs
 
     Returns:
         float: Ratio of 95th/5th percentile intensities
@@ -1498,8 +1512,10 @@ def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int =
     Example:
         >>> extent = extent_identified_precursor_intensity(exp, ms_level=2)
     """
-    # computed over all MS2 precursors (no ID info in plain mzML)
     specs = _filter_by_mslevel(exp, ms_level)
+    if accepted_native_ids is not None:
+        wanted = set(accepted_native_ids)
+        specs = [s for s in specs if s.getNativeID() in wanted]
     _, preI, _ = _precursor_values(specs)
     preI = preI[~np.isnan(preI)]
     if preI.size == 0: return np.nan
