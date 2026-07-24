@@ -137,38 +137,14 @@ METRIC_METADATA = {
         "description": "Fastest observed frequency of MS2 spectrum acquisition (Hz)."
     },
 
-    # RT over MS quantiles
-    "RT_MS1_Q1": {
+    # RT over MS quantiles (four interval fractions as one n-tuple)
+    "RT_MS1_Quantiles": {
         "accession": "MS:4000184",
-        "description": "The interval used for acquisition of the first quantile of all MS1 events divided by retention time duration"
+        "description": "The four RT interval fractions of MS1 events (between the 25/50/75th scan-time percentiles), normalized by the MS1 acquisition duration; sums to 1.0."
     },
-    "RT_MS1_Q2": {
-        "accession": "MS:4000184",
-        "description": "The interval when the second quantile of all MS1 events was acquired, divided by RT duration."
-    },
-    "RT_MS1_Q3": {
-        "accession": "MS:4000184",
-        "description": "The interval when the third quantile of all MS1 events was acquired, divided by RT duration."
-    },
-    "RT_MS1_Q4": {
-        "accession": "MS:4000184",
-        "description": "The interval when the fourth quantile of all MS1 events was acquired, divided by RT duration."
-    },
-    "RT_MS2_Q1": {
+    "RT_MS2_Quantiles": {
         "accession": "MS:4000185",
-        "description": "The interval when the first quantile of all MS2 events was acquired, divided by RT duration."
-    },
-    "RT_MS2_Q2": {
-        "accession": "MS:4000185",
-        "description": "The interval when the second quantile of all MS2 events was acquired, divided by RT duration."
-    },
-    "RT_MS2_Q3": {
-        "accession": "MS:4000185",
-        "description": "The interval when the third quantile of all MS2 events was acquired, divided by RT duration."
-    },
-    "RT_MS2_Q4": {
-        "accession": "MS:4000185",
-        "description": "The interval when the fourth quantile of all MS2 events was acquired, divided by RT duration."
+        "description": "The four RT interval fractions of MS2 events (between the 25/50/75th scan-time percentiles), normalized by the MS2 acquisition duration; sums to 1.0."
     },
 
     # TIC quartile ratios
@@ -911,72 +887,60 @@ def chromatography_duration(exp: oms.MSExperiment) -> float:
 
 def rt_over_ms_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> List[float]:
     """
-    MS1 quantile RT fraction (MS:4000055) or MS2 quantile RT fraction (MS:4000056).
+    MS1 quantile RT fraction (MS:4000184) or MS2 quantile RT fraction (MS:4000185).
 
-    MS:4000055:
-    "The interval used for acquisition of the first, second, third, and fourth
-    quantile of all MS1 events divided by retention time duration." [PSI:MS]
+    Normative contract (issue #28): the current PSI-MS terms MS:4000184/MS:4000185
+    describe an n-tuple of four RT *interval* widths, matching the original
+    QuaMeter "RT-MS-Q1..Q4" metrics. rawQC reproduces the QuaMeter definition:
 
-    MS:4000056:
-    "The interval used for acquisition of the first, second, third, and fourth
-    quantile of all MS2 events divided by retention time duration." [PSI:MS]
+        Q1 = 25th percentile of the level's scan retention times
+        Q2 = 50th percentile
+        Q3 = 75th percentile
+        interval_1 = (Q1 - RTmin) / duration
+        interval_2 = (Q2 - Q1)  / duration
+        interval_3 = (Q3 - Q2)  / duration
+        interval_4 = (RTmax - Q3) / duration
 
-    The metric is calculated as follows:
-    (1) The retention time duration of the whole experiment is determined
-        (taking into account all MS levels),
-    (2) The spectra are filtered according to the MS level and subsequently
-        ordered according to retention time,
-    (3) The MS events are split into four (approximately) equal parts,
-    (4) The relative retention time is calculated (using the retention time
-        duration from (1) and taking into account the minimum retention time),
-    (5) The relative retention time values associated to the MS event parts
-        are returned.
+    where ``duration`` is the acquisition span of *this MS level* (RTmax - RTmin
+    of the level), not the whole experiment. The four intervals sum to 1.0.
+
+    This replaces the previous behavior, which returned four cumulative RT
+    endpoints, normalized by the whole-experiment duration, using an index
+    partition that did not match any reference. (The obsolete MS:4000055/056
+    accessions were also cited in the old docstring.) If exact MsQuality
+    cumulative-endpoint compatibility is needed, it should be exposed as a
+    separately named custom metric.
 
     Details:
-        MS:4000055
-        synonym: "RT-MS-Q1" RELATED [PMID:24494671]
-        is_a: MS:4000004 ! n-tuple
-        relationship: has_metric_category MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000016 ! retention time metric
-        relationship: has_metric_category MS:4000021 ! MS1 metric
-
-        MS:4000056
-        synonym: "RT-MSMS-Q1" RELATED [PMID:24494671]
-        relationship: has_metric_category MS:4000022 ! MS2 metric
-
-    Note:
-        chromatographyDuration considers the total runtime (including MS1 and MS2 scans).
-        Returns [NaN, NaN, NaN, NaN] if filtered spectra has less than 4 scan events.
+        MS:4000184  synonym: "RT-MS-Q1" RELATED [PMID:24494671]  is_a: n-tuple
+        MS:4000185  synonym: "RT-MSMS-Q1" RELATED [PMID:24494671]
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 1)
 
     Returns:
-        list: Four float values representing RT fractions for each quantile
+        list: four RT interval fractions (summing to 1.0), or [NaN]*4
 
     Example:
         >>> quantiles_ms1 = rt_over_ms_quantiles(exp, ms_level=1)
-        >>> quantiles_ms2 = rt_over_ms_quantiles(exp, ms_level=2)
     """
-    specs = _filter_by_mslevel(exp, ms_level)
-    if len(specs) < 4:
-        return [np.nan]*4
-    specs = sorted(specs, key=lambda s: s.getRT())
-    rts = _rts(specs)
-    total = chromatography_duration(exp)
-    if not np.isfinite(total) or total == 0:
-        return [np.nan]*4
+    rts = _rts(_filter_by_mslevel(exp, ms_level))
+    rts = rts[np.isfinite(rts)]
+    if rts.size < 2:
+        return [np.nan] * 4
     rtmin = float(np.min(rts))
-    # Equal quartile slices by index; fallback to quantile positions if needed
-    ind = np.repeat(np.arange(1,5), repeats=int(np.ceil(len(specs)/4)))[:len(specs)]
-    edges = np.where(np.diff(ind, prepend=ind[0]) != 0)[0] - 1
-    edges = (edges[1:].tolist() + [len(specs)-1]) if len(specs) >= 4 else [len(specs)-1]
-    if len(edges) != 4:
-        qpos = (np.array([0.25, 0.50, 0.75, 1.00]) * (len(specs)-1)).round().astype(int)
-        edges = qpos.tolist()
-    rel = (rts[edges] - rtmin) / total
-    return [float(x) for x in rel]
+    rtmax = float(np.max(rts))
+    duration = rtmax - rtmin
+    if duration <= 0:
+        return [np.nan] * 4
+    q1, q2, q3 = np.percentile(rts, [25, 50, 75])
+    return [
+        float((q1 - rtmin) / duration),
+        float((q2 - q1) / duration),
+        float((q3 - q2) / duration),
+        float((rtmax - q3) / duration),
+    ]
 
 def tic_quartile_to_quartile_log_ratio(exp: oms.MSExperiment, ms_level: int = 1, mode: str = "TIC", relative_to: str = "previous") -> List[float]:
     """
@@ -2507,14 +2471,9 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["RtRange_MS1"] = [float(x) for x in rt_acquisition_range(exp, 1)]
     computed["RtRange_MS2"] = [float(x) for x in rt_acquisition_range(exp, 2)]
 
-    computed["RT_MS1_Q1"] = _safe_get(rt_quantiles_ms1, 0)
-    computed["RT_MS1_Q2"] = _safe_get(rt_quantiles_ms1, 1)
-    computed["RT_MS1_Q3"] = _safe_get(rt_quantiles_ms1, 2)
-    computed["RT_MS1_Q4"] = _safe_get(rt_quantiles_ms1, 3)
-    computed["RT_MS2_Q1"] = _safe_get(rt_quantiles_ms2, 0)
-    computed["RT_MS2_Q2"] = _safe_get(rt_quantiles_ms2, 1)
-    computed["RT_MS2_Q3"] = _safe_get(rt_quantiles_ms2, 2)
-    computed["RT_MS2_Q4"] = _safe_get(rt_quantiles_ms2, 3)
+    # MS:4000184/MS:4000185 emitted as one four-value interval n-tuple each.
+    computed["RT_MS1_Quantiles"] = [float(x) for x in rt_quantiles_ms1]
+    computed["RT_MS2_Quantiles"] = [float(x) for x in rt_quantiles_ms2]
     computed["RT_MS1_IQR"] = rt_iqr(exp, 1)
     computed["RT_MS1_IQRRate"] = rt_iqr_rate(exp, 1)
 
@@ -2625,14 +2584,8 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "MzRange_MS2",
         "RtRange_MS1",
         "RtRange_MS2",
-        "RT_MS1_Q1",
-        "RT_MS1_Q2",
-        "RT_MS1_Q3",
-        "RT_MS1_Q4",
-        "RT_MS2_Q1",
-        "RT_MS2_Q2",
-        "RT_MS2_Q3",
-        "RT_MS2_Q4",
+        "RT_MS1_Quantiles",
+        "RT_MS2_Quantiles",
         "RT_MS1_IQR",
         "RT_MS1_IQRRate",
         "TIC_MS1_Area",
