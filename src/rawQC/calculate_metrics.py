@@ -90,15 +90,15 @@ METRIC_METADATA = {
     # FAIMS
     "FAIMS_CV_Count": {
         "accession": None,
-        "description": "Number of different FAIMS compensation voltages used."
+        "description": "Number of distinct FAIMS compensation voltages used."
     },
-    "FAIMS_CV_Min": {
-        "accession": "MS:1001581",
-        "description": "Minimum FAIMS compensation voltage (V)."
+    "FAIMS_CV_Values": {
+        "accession": None,
+        "description": "Sorted distinct FAIMS compensation voltages used, in volts (V), as an n-tuple."
     },
-    "FAIMS_CV_Max": {
-        "accession": "MS:1001581",
-        "description": "Maximum FAIMS compensation voltage (V)."
+    "FAIMS_CV_Range": {
+        "accession": None,
+        "description": "Range [min, max] of FAIMS compensation voltages, in volts (V)."
     },
 
     # Empty scans
@@ -328,26 +328,27 @@ METRIC_METADATA = {
         "description": "The number of distinct MS levels present in the run (e.g., MS1, MS2, MS3)."
     },
 
-    # Polarity statistics
+    # Polarity statistics (custom counts). MS:1000129/MS:1000130 are scan-polarity
+    # CV terms, not QC metrics, so they are NOT used as accessions for counts.
     "Polarity_MS1_positive": {
-        "accession": "MS:1000130",
-        "description": "Number of MS1 spectra acquired in positive polarity mode."
+        "accession": None,
+        "description": "Number of MS1 spectra acquired in positive polarity mode (scan polarity MS:1000130)."
     },
     "Polarity_MS1_negative": {
-        "accession": "MS:1000129",
-        "description": "Number of MS1 spectra acquired in negative polarity mode."
+        "accession": None,
+        "description": "Number of MS1 spectra acquired in negative polarity mode (scan polarity MS:1000129)."
     },
     "Polarity_MS1_unknown": {
         "accession": None,
         "description": "Number of MS1 spectra with unknown polarity."
     },
     "Polarity_MS2_positive": {
-        "accession": "MS:1000130",
-        "description": "Number of MS2 spectra acquired in positive polarity mode."
+        "accession": None,
+        "description": "Number of MS2 spectra acquired in positive polarity mode (scan polarity MS:1000130)."
     },
     "Polarity_MS2_negative": {
-        "accession": "MS:1000129",
-        "description": "Number of MS2 spectra acquired in negative polarity mode."
+        "accession": None,
+        "description": "Number of MS2 spectra acquired in negative polarity mode (scan polarity MS:1000129)."
     },
     "Polarity_MS2_unknown": {
         "accession": None,
@@ -436,22 +437,16 @@ METRIC_METADATA = {
         "description": "Fraction of estimatable MS2 spectra estimated as profile."
     },
 
-    # Mass analyzer information
-    "MassAnalyzer_0_Type": {
+    # Mass analyzer information (one table, arbitrary number of analyzers)
+    "MassAnalyzers": {
         "accession": None,
-        "description": "Type of the first mass analyzer (e.g., FTICR, Orbitrap, TOF, IT, Q)."
+        "description": "Mass analyzers of the instrument as a table with index, type (e.g. ORBITRAP, TOF, IT, QUADRUPOLE), and resolution columns."
     },
-    "MassAnalyzer_0_Resolution": {
+
+    # Activation methods (one table, arbitrary number of methods/levels)
+    "ActivationMethods": {
         "accession": None,
-        "description": "Resolution of the first mass analyzer."
-    },
-    "MassAnalyzer_1_Type": {
-        "accession": None,
-        "description": "Type of the second mass analyzer (if present)."
-    },
-    "MassAnalyzer_1_Resolution": {
-        "accession": None,
-        "description": "Resolution of the second mass analyzer (if present)."
+        "description": "Precursor activation methods observed as a table with ms_level, method (e.g. HCD, CID, ETD), and count columns."
     },
 
 
@@ -2171,65 +2166,63 @@ def peak_type_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
 
     return result
 
-def activation_method_statistics(exp: oms.MSExperiment) -> Dict[str, int]:
+def activation_method_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
-    Count activation methods per MS level.
+    Count activation methods per MS level as a single table.
 
-    Activation methods include CID, HCD, ETD, etc.
+    Returns a table (dict of columns) rather than one dynamic key per method, so
+    an arbitrary number of activation methods is preserved without fixed key
+    slots and the result is a single valid custom metric.
 
     Args:
         exp: MSExperiment object
 
     Returns:
-        dict: Counts of activation methods per MS level
+        dict: table with columns ms_level, method, count (possibly empty columns)
     """
     from collections import Counter
 
-    act_method_counts = Counter()
-
+    counts: "Counter" = Counter()
     for spec in exp:
         level = int(spec.getMSLevel())
         for pc in spec.getPrecursors():
             for am in pc.getActivationMethods():
-                am_name = _activation_method_to_str(am)
+                counts[(level, _activation_method_to_str(am))] += 1
 
-                key = f"MS{level}_ActivationMethod_{am_name}"
-                act_method_counts[key] += 1
-
-    return dict(act_method_counts)
+    rows = sorted(counts.items())
+    return {
+        "ms_level": [lvl for (lvl, _name), _c in rows],
+        "method": [name for (_lvl, name), _c in rows],
+        "count": [c for _key, c in rows],
+    }
 
 def mass_analyzer_info(exp: oms.MSExperiment) -> Dict[str, Any]:
     """
-    Extract mass analyzer information.
+    Extract mass analyzer information as a single table.
 
-    Returns analyzer type and resolution.
+    Returns a table (dict of columns) covering every mass analyzer, rather than
+    fixed MassAnalyzer_0/MassAnalyzer_1 key slots. Conversion no longer silently
+    drops analyzers on error.
 
     Args:
         exp: MSExperiment object
 
     Returns:
-        dict: Mass analyzer information
+        dict: table with columns index, type, resolution
     """
-    result = {}
-
+    indices: List[int] = []
+    types: List[str] = []
+    resolutions: List[Optional[float]] = []
     try:
-        instrument = exp.getInstrument()
-        analyzers = instrument.getMassAnalyzers()
-
-        if analyzers:
-            for idx, ma in enumerate(analyzers):
-                # Get analyzer type
-                ma_type = _analyzer_type_to_str(ma.getType())
-                result[f"MassAnalyzer_{idx}_Type"] = ma_type
-
-                # Get resolution if available
-                resolution = ma.getResolution()
-                if resolution > 0:
-                    result[f"MassAnalyzer_{idx}_Resolution"] = float(resolution)
+        analyzers = exp.getInstrument().getMassAnalyzers()
     except Exception:
-        pass
-
-    return result
+        analyzers = []
+    for idx, ma in enumerate(analyzers or []):
+        indices.append(idx)
+        types.append(_analyzer_type_to_str(ma.getType()))
+        res = float(ma.getResolution())
+        resolutions.append(res if res > 0 else None)
+    return {"index": indices, "type": types, "resolution": resolutions}
 
 def number_of_ms_levels(exp: oms.MSExperiment) -> int:
     """
@@ -2311,14 +2304,16 @@ def faims_compensation_voltages(exp: oms.MSExperiment) -> Dict[str, Any]:
     Returns:
         dict: FAIMS CV information
     """
-    result = {}
+    result: Dict[str, Any] = {}
 
     cvs = _faims_compensation_voltages(exp)
     if cvs:
-        result["FAIMS_CV_Count"] = len(cvs)
-        result["FAIMS_CV_Values"] = [float(cv) for cv in cvs]
-        result["FAIMS_CV_Min"] = float(min(cvs))
-        result["FAIMS_CV_Max"] = float(max(cvs))
+        values = [float(cv) for cv in cvs]
+        # Distinguish the distinct values, their [min, max] range, and the count.
+        # Voltages are in volts (documented in the metric metadata).
+        result["FAIMS_CV_Count"] = len(values)
+        result["FAIMS_CV_Values"] = values
+        result["FAIMS_CV_Range"] = [min(values), max(values)]
 
     return result
 
@@ -2525,12 +2520,11 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["ChargeMedian"] = charge_info.get("ChargeMedian", np.nan)
     computed["MS2_PrecursorCharge_Fractions"] = charge_info.get("MS2_PrecursorCharge_Fractions")
 
-    ma_info = mass_analyzer_info(exp)
-    activation_methods = activation_method_statistics(exp)
-    faims_info = faims_compensation_voltages(exp)
-    computed.update(ma_info)
-    computed.update(activation_methods)
-    computed.update(faims_info)
+    # Acquisition/instrument facts as single valid custom metrics (tables) with
+    # no fixed key slots, rather than dynamic per-method/per-analyzer keys.
+    computed["MassAnalyzers"] = mass_analyzer_info(exp)
+    computed["ActivationMethods"] = activation_method_statistics(exp)
+    computed.update(faims_compensation_voltages(exp))
 
     for chrom_type, count in chrom_stats["counts_by_type"].items():
         type_key = chrom_type.upper() if chrom_type != "unknown" else "Unknown"
@@ -2611,7 +2605,11 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "PrecursorIntensity_Sd",
         "PrecursorIntensity_FallbackCount",
         "ExtentPrecursorIntensity_95over5_MS2",
-        "MS2_ActivationMethod_0",
+        "MassAnalyzers",
+        "ActivationMethods",
+        "FAIMS_CV_Count",
+        "FAIMS_CV_Values",
+        "FAIMS_CV_Range",
         "Chromatograms_RT_Min",
         "Chromatograms_RT_Max",
     ]
