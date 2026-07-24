@@ -1726,9 +1726,10 @@ def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]
     specs = _filter_by_mslevel(exp, ms_level)
     n_ms2 = len(specs)
     _, _, charges = _precursor_values(specs)
-    # Known charge states (>=1); unknown = missing/zero charge, kept as its own
-    # bin. QuaMeter stores unknown charge as 0 and divides every bin by ALL MS2
-    # scans, so the fractions have the reference denominator and sum to 1.0.
+    # Known charge states (>=1); unknown = missing, zero, or non-physical
+    # negative charge, kept as its own bin. QuaMeter stores unknown charge as 0
+    # and divides every bin by ALL MS2 scans, so the fractions have the reference
+    # denominator and sum to 1.0.
     c = charges[~np.isnan(charges)].astype(int)
     out: Dict[str, Any] = {}
 
