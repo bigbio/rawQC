@@ -111,38 +111,20 @@ METRIC_METADATA = {
         "description": "Number of MS2 scans where the peaks' intensity sums to 0 (i.e. no peaks or only 0-intensity peaks)."
     },
 
-    # m/z and RT ranges
-    "MzRange_MS1_Min": {
-        "accession": "MS:4000070",
-        "description": "Lower limit of m/z values at which MS1 spectra are recorded."
-    },
-    "MzRange_MS1_Max": {
-        "accession": "MS:4000070",
-        "description": "Upper limit of m/z values at which MS1 spectra are recorded."
-    },
-    "MzRange_MS2_Min": {
-        "accession": "MS:4000070",
-        "description": "Lower limit of m/z precursor values at which MS2 spectra are recorded."
-    },
-    "MzRange_MS2_Max": {
-        "accession": "MS:4000070",
-        "description": "Upper limit of m/z precursor values at which MS2 spectra are recorded."
-    },
-    "RtRange_MS1_Min": {
+    # m/z and RT acquisition ranges (each a two-value [min, max] n-tuple)
+    # MS:4000069 = precursor m/z acquisition range (MSn only);
+    # MS:4000070 = retention-time acquisition range.
+    "MzRange_MS2": {
         "accession": "MS:4000069",
-        "description": "Lower limit of retention time at which MS1 spectra are recorded (seconds)."
+        "description": "Lower and upper limit of precursor m/z values at which MS2 spectra are recorded, as [min, max]."
     },
-    "RtRange_MS1_Max": {
-        "accession": "MS:4000069",
-        "description": "Upper limit of retention time at which MS1 spectra are recorded (seconds)."
+    "RtRange_MS1": {
+        "accession": "MS:4000070",
+        "description": "Lower and upper limit of retention time (seconds) at which MS1 spectra are recorded, as [min, max]."
     },
-    "RtRange_MS2_Min": {
-        "accession": "MS:4000069",
-        "description": "Lower limit of retention time at which MS2 spectra are recorded (seconds)."
-    },
-    "RtRange_MS2_Max": {
-        "accession": "MS:4000069",
-        "description": "Upper limit of retention time at which MS2 spectra are recorded (seconds)."
+    "RtRange_MS2": {
+        "accession": "MS:4000070",
+        "description": "Lower and upper limit of retention time (seconds) at which MS2 spectra are recorded, as [min, max]."
     },
 
     # Fastest acquisition frequency
@@ -1198,6 +1180,11 @@ def mz_acquisition_range(exp: oms.MSExperiment, ms_level: int = 2) -> Tuple[floa
         relationship: has_metric_category MS:4000019 ! MS metric
         relationship: has_units MS:1000040 ! m/z
         relationship: has_value_concept STATO:0000035 ! range
+
+    Note:
+        This reads precursor m/z values, so it is meaningful only for MSn
+        (ms_level >= 2). MS1 spectra have no precursor and would yield (NaN, NaN);
+        rawQC therefore does not emit an MS1 precursor m/z range.
 
     Args:
         exp: MSExperiment object
@@ -2513,19 +2500,12 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["EmptyScans_MS1"] = number_empty_scans(exp, 1)
     computed["EmptyScans_MS2"] = number_empty_scans(exp, 2)
 
-    mzmin_ms1, mzmax_ms1 = mz_acquisition_range(exp, 1)
-    mzmin_ms2, mzmax_ms2 = mz_acquisition_range(exp, 2)
-    computed["MzRange_MS1_Min"] = mzmin_ms1
-    computed["MzRange_MS1_Max"] = mzmax_ms1
-    computed["MzRange_MS2_Min"] = mzmin_ms2
-    computed["MzRange_MS2_Max"] = mzmax_ms2
-
-    rtmin_ms1, rtmax_ms1 = rt_acquisition_range(exp, 1)
-    rtmin_ms2, rtmax_ms2 = rt_acquisition_range(exp, 2)
-    computed["RtRange_MS1_Min"] = rtmin_ms1
-    computed["RtRange_MS1_Max"] = rtmax_ms1
-    computed["RtRange_MS2_Min"] = rtmin_ms2
-    computed["RtRange_MS2_Max"] = rtmax_ms2
+    # Precursor m/z range (MS:4000069) is defined for MSn only; MS1 spectra have
+    # no precursor, so no MS1 precursor range is emitted. Each range is one
+    # two-value [min, max] n-tuple.
+    computed["MzRange_MS2"] = [float(x) for x in mz_acquisition_range(exp, 2)]
+    computed["RtRange_MS1"] = [float(x) for x in rt_acquisition_range(exp, 1)]
+    computed["RtRange_MS2"] = [float(x) for x in rt_acquisition_range(exp, 2)]
 
     computed["RT_MS1_Q1"] = _safe_get(rt_quantiles_ms1, 0)
     computed["RT_MS1_Q2"] = _safe_get(rt_quantiles_ms1, 1)
@@ -2642,14 +2622,9 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "AvgCycleTime_MS1",
         "EmptyScans_MS1",
         "EmptyScans_MS2",
-        "MzRange_MS1_Min",
-        "MzRange_MS1_Max",
-        "MzRange_MS2_Min",
-        "MzRange_MS2_Max",
-        "RtRange_MS1_Min",
-        "RtRange_MS1_Max",
-        "RtRange_MS2_Min",
-        "RtRange_MS2_Max",
+        "MzRange_MS2",
+        "RtRange_MS1",
+        "RtRange_MS2",
         "RT_MS1_Q1",
         "RT_MS1_Q2",
         "RT_MS1_Q3",
