@@ -663,8 +663,12 @@ def validate_metric_registry(computed: Dict[str, Any]) -> Dict[str, List[str]]:
       * "uncovered": computed keys with neither a METRIC_METADATA entry nor a
         matching dynamic-family pattern (a computed metric lacking metadata);
       * "ordered_missing_metadata": METRIC_ORDER entries without a metadata entry;
-      * "ordered_not_computed": static (non-dynamic) METRIC_ORDER entries that the
-        run did not produce.
+      * "ordered_not_computed": METRIC_ORDER entries the run did not produce.
+        METRIC_ORDER holds only static metrics, so a dynamic-looking stale entry
+        (e.g. a reintroduced "MS2_ActivationMethod_0") is flagged here too;
+      * "registered_orphans": metadata entries that are neither computed nor part
+        of a dynamic family -- dead registrations such as the former
+        MS_Run_Duration (registered but never produced).
 
     A test can assert every category is empty to catch registry/order/computation
     drift.
@@ -672,12 +676,14 @@ def validate_metric_registry(computed: Dict[str, Any]) -> Dict[str, List[str]]:
     uncovered = [k for k in computed
                  if k not in METRIC_METADATA and not _is_dynamic_metric(k)]
     ordered_missing_metadata = [k for k in METRIC_ORDER if k not in METRIC_METADATA]
-    ordered_not_computed = [k for k in METRIC_ORDER
-                            if k not in computed and not _is_dynamic_metric(k)]
+    ordered_not_computed = [k for k in METRIC_ORDER if k not in computed]
+    registered_orphans = [k for k in METRIC_METADATA
+                          if k not in computed and not _is_dynamic_metric(k)]
     return {
         "uncovered": uncovered,
         "ordered_missing_metadata": ordered_missing_metadata,
         "ordered_not_computed": ordered_not_computed,
+        "registered_orphans": registered_orphans,
     }
 
 

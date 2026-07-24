@@ -64,6 +64,7 @@ def test_registry_validation_has_no_violations():
     assert problems["uncovered"] == [], f"computed metrics without metadata: {problems['uncovered']}"
     assert problems["ordered_missing_metadata"] == []
     assert problems["ordered_not_computed"] == []
+    assert problems["registered_orphans"] == [], f"dead registrations: {problems['registered_orphans']}"
 
 
 def test_validation_flags_an_uncovered_metric():
@@ -71,3 +72,23 @@ def test_validation_flags_an_uncovered_metric():
     # reported, proving the guard actually catches drift.
     problems = validate_metric_registry({"TotallyBogusMetric_xyz": 1})
     assert "TotallyBogusMetric_xyz" in problems["uncovered"]
+
+
+def test_validation_flags_registered_but_not_produced():
+    # A registered/ordered metric that a run fails to produce must be flagged in
+    # BOTH the ordered-not-computed and registered-orphans categories.
+    computed = compute_qc_metrics(_rich_exp())
+    del computed["ChromatographyDuration"]
+    problems = validate_metric_registry(computed)
+    assert "ChromatographyDuration" in problems["ordered_not_computed"]
+    assert "ChromatographyDuration" in problems["registered_orphans"]
+
+
+def test_validation_flags_stale_dynamic_looking_order_entry(monkeypatch):
+    # Reintroducing the stale "MS2_ActivationMethod_0" order entry (which matches
+    # a dynamic pattern) must still be caught, not silently excluded.
+    import importlib
+    cm = importlib.import_module("rawQC.calculate_metrics")
+    monkeypatch.setattr(cm, "METRIC_ORDER", cm.METRIC_ORDER + ["MS2_ActivationMethod_0"])
+    problems = cm.validate_metric_registry(compute_qc_metrics(_rich_exp()))
+    assert "MS2_ActivationMethod_0" in problems["ordered_not_computed"]
