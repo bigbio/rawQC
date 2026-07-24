@@ -371,17 +371,9 @@ METRIC_METADATA = {
     },
 
     # Area under TIC
-    "TIC_MS1_Area_RTQ1": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the first RT quartile (0-25%)."
-    },
-    "TIC_MS1_Area_RTQ2": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the second RT quartile (25-50%)."
-    },
-    "TIC_MS1_Area_RTQ3": {
-        "accession": None,
-        "description": "Area under MS1 TIC for the third RT quartile (50-75%)."
+    "TIC_MS1_Area_RTQuantiles": {
+        "accession": "MS:4000156",
+        "description": "Area under the MS1 TIC for the four retention-time quartiles (0-25%, 25-50%, 50-75%, 75-100%) as one n-tuple."
     },
     "TIC_MS1_Area": {
         "accession": "MS:4000029",
@@ -1452,12 +1444,20 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     specs = sorted(specs, key=lambda s: s.getRT())
     rts = _rts(specs)
     tic = _ion_counts(specs)
+    finite = np.isfinite(rts)
+    rts = rts[finite]
+    tic = tic[finite]
+    if rts.size == 0: return [np.nan]*4
     qs = np.quantile(rts, [0.0, 0.25, 0.50, 0.75, 1.0])
-    q1 = tic[(rts > qs[0]) & (rts <= qs[1])]
-    q2 = tic[(rts > qs[1]) & (rts <= qs[2])]
-    q3 = tic[(rts > qs[2]) & (rts <= qs[3])]
-    q4 = tic[(rts > qs[3]) & (rts <= qs[4])]
-    return [float(np.nansum(q)) for q in (q1, q2, q3, q4)]
+    # The lowest bin must include the minimum-RT spectrum (>= qs[0]); the old
+    # code used `rts > qs[0]` and silently lost that scan's TIC. The remaining
+    # bins are left-open/right-closed so every finite-RT spectrum lands in
+    # exactly one bin and the four values sum to the whole-run TIC.
+    b1 = (rts >= qs[0]) & (rts <= qs[1])
+    b2 = (rts >  qs[1]) & (rts <= qs[2])
+    b3 = (rts >  qs[2]) & (rts <= qs[3])
+    b4 = (rts >  qs[3]) & (rts <= qs[4])
+    return [float(np.nansum(tic[b])) for b in (b1, b2, b3, b4)]
 
 def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int = 2) -> float:
     """
@@ -2230,9 +2230,9 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
 
     computed["TIC_MS1_Area"] = area_under_tic(exp, 1)
     computed["TIC_MS2_Area"] = area_under_tic(exp, 2)
-    computed["TIC_MS1_Area_RTQ1"] = _safe_get(qareas, 0)
-    computed["TIC_MS1_Area_RTQ2"] = _safe_get(qareas, 1)
-    computed["TIC_MS1_Area_RTQ3"] = _safe_get(qareas, 2)
+    # All four RT-quartile areas are emitted as one MS:4000156 n-tuple (the old
+    # code exposed only Q1-Q3 as separate scalars and discarded Q4).
+    computed["TIC_MS1_Area_RTQuantiles"] = [float(x) for x in qareas]
     computed["MedianTIC_in_RT_MS1_IQR"] = median_tic_rt_iqr(exp, 1)
     computed["TIC_MS1_MedianInHalfRange"] = median_tic_of_rt_range(exp, 1)
     computed["RT_TIC_Q0"] = _safe_get(tfr, 0)
@@ -2347,9 +2347,7 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
         "RT_MS1_IQRRate",
         "TIC_MS1_Area",
         "TIC_MS2_Area",
-        "TIC_MS1_Area_RTQ1",
-        "TIC_MS1_Area_RTQ2",
-        "TIC_MS1_Area_RTQ3",
+        "TIC_MS1_Area_RTQuantiles",
         "MedianTIC_in_RT_MS1_IQR",
         "TIC_MS1_MedianInHalfRange",
         "RT_TIC_Q0",
@@ -2494,11 +2492,17 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
 
         qmetrics = []
         for k, v in metrics_dict.items():
-            # ensure scalar JSON value
+            # ensure JSON-serialisable value; n-tuples (lists/tuples) are kept as
+            # arrays with non-finite entries mapped to null, not stringified
             if v is None or (isinstance(v, float) and not np.isfinite(v)):
                 val = None
             elif isinstance(v, (int, float, str)):
                 val = v
+            elif isinstance(v, (list, tuple)):
+                val = [
+                    (x if (isinstance(x, (int, str)) or (isinstance(x, float) and np.isfinite(x))) else None)
+                    for x in v
+                ]
             else:
                 val = str(v)
 
