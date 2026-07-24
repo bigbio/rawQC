@@ -28,7 +28,9 @@ def _ms1(rt, faims=None):
     ins = sp.getInstrumentSettings(); ins.setPolarity(oms.IonSource.Polarity.POSITIVE)
     sp.setInstrumentSettings(ins)
     if faims is not None:
-        sp.setMetaValue("FAIMS_CV", float(faims))
+        # OpenMS stores a FAIMS CV as drift time with the FAIMS unit (see #23).
+        sp.setDriftTime(float(faims))
+        sp.setDriftTimeUnit(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
     return sp
 
 
