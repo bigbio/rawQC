@@ -74,6 +74,14 @@ def test_corpus_metrics_are_semantically_valid(name):
             assert val is None or isinstance(val, (int, float, str, list, dict))
 
 
+def test_faims_fixture_actually_exercises_faims():
+    # The corpus claims to cover FAIMS; make sure the fixture is not inert (the
+    # metric must actually be emitted, not silently absent).
+    metrics = compute_qc_metrics(CORPUS["faims_run"]())
+    assert metrics.get("FAIMS_CV_Count", 0) >= 1
+    assert "FAIMS_CV_Range" in metrics
+
+
 def test_reference_manifest_is_explicit():
     # Every audited reference source is pinned to a commit/version so expected
     # values are never silently mixed across conflicting implementations.
