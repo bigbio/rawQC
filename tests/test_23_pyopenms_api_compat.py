@@ -85,6 +85,9 @@ def test_enum_string_converters():
 
     assert _activation_method_to_str(oms.Precursor.ActivationMethod.HCD) == "HCD"
     assert _activation_method_to_str(oms.Precursor.ActivationMethod.CID) == "CID"
+    # Mixed-case ETD-hybrid methods must not degrade to "unknown".
+    assert _activation_method_to_str(oms.Precursor.ActivationMethod.ETciD) == "ETciD"
+    assert _activation_method_to_str(oms.Precursor.ActivationMethod.EThcD) == "EThcD"
 
     assert _analyzer_type_to_str(oms.MassAnalyzer.AnalyzerType.ORBITRAP) == "ORBITRAP"
     assert _analyzer_type_to_str(oms.MassAnalyzer.AnalyzerType.TOF) == "TOF"

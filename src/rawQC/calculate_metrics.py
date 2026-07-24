@@ -680,7 +680,10 @@ def _enum_name_map(enum_cls: Any) -> Dict[int, str]:
     """
     mapping: Dict[int, str] = {}
     for member in dir(enum_cls):
-        if not member.isupper() or "SIZE_OF" in member:
+        # Skip dunders, the getMapping helper, and the SIZE_OF sentinel. Do NOT
+        # filter on isupper(): some members are legitimately mixed-case (e.g. the
+        # activation methods ETciD/EThcD) and must not be dropped to "unknown".
+        if member.startswith("_") or member == "getMapping" or "SIZE_OF" in member:
             continue
         try:
             mapping[int(getattr(enum_cls, member))] = member
