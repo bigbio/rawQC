@@ -556,6 +556,30 @@ def _filter_by_mslevel(exp: oms.MSExperiment, level: int) -> List[oms.MSSpectrum
     """
     return [s for s in exp if s.getMSLevel() == level]
 
+def _select_spectra(exp: oms.MSExperiment, level: int,
+                    accepted_native_ids: Optional[set] = None) -> List[oms.MSSpectrum]:
+    """
+    Filter spectra by MS level and, optionally, by accepted identifications.
+
+    When ``accepted_native_ids`` is None the result is every spectrum of the MS
+    level (the ID-free proxy). When a set of accepted spectrum native IDs is
+    supplied, only those spectra are kept, which realizes the ID-based PSI-MS
+    definition ("after user-defined acceptance criteria are applied").
+
+    Args:
+        exp: MSExperiment object
+        level: MS level to keep
+        accepted_native_ids: optional set of accepted spectrum native IDs
+
+    Returns:
+        list: selected spectra
+    """
+    specs = _filter_by_mslevel(exp, level)
+    if accepted_native_ids is not None:
+        wanted = set(accepted_native_ids)
+        specs = [s for s in specs if s.getNativeID() in wanted]
+    return specs
+
 def _rts(specs: List[oms.MSSpectrum]) -> np.ndarray:
     """
     Extract retention times from spectra.
@@ -1294,9 +1318,17 @@ def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2) -> float:
     preMz, _, _ = _precursor_values(specs)
     return _nanmedian(preMz)
 
-def rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def rt_iqr(exp: oms.MSExperiment, ms_level: int = 1,
+           accepted_native_ids: Optional[set] = None) -> float:
     """
-    Interquartile RT period for identified quantification data points (MS:4000153).
+    ID-free proxy for the interquartile RT period (MS:4000153, C-2A).
+
+    MS:4000153 is an ID-based term ("after user-defined acceptance criteria are
+    applied"). Without identifications rawQC computes the interquartile RT period
+    over ALL spectra of the MS level, which is an ID-free proxy and is emitted
+    WITHOUT the MS:4000153 accession. Pass ``accepted_native_ids`` (accepted
+    spectrum native IDs) to restrict the computation to identified spectra and
+    reproduce the ID-based definition.
 
     MS:4000153:
     "The interquartile retention time period, in seconds, for all quantification
@@ -1330,11 +1362,16 @@ def rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     Example:
         >>> iqr = rt_iqr(exp, ms_level=1)
     """
-    return _iqr(_rts(_filter_by_mslevel(exp, ms_level)))
+    return _iqr(_rts(_select_spectra(exp, ms_level, accepted_native_ids)))
 
-def rt_iqr_rate(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def rt_iqr_rate(exp: oms.MSExperiment, ms_level: int = 1,
+                accepted_native_ids: Optional[set] = None) -> float:
     """
-    Rate of the interquartile RT period for identified quantification data points (MS:4000154).
+    ID-free proxy for the interquartile-RT-period rate (MS:4000154, C-2B).
+
+    Like :func:`rt_iqr`, MS:4000154 is ID-based. Without identifications this is
+    an ID-free proxy over all spectra of the MS level, emitted without the
+    accession; ``accepted_native_ids`` restricts it to identified spectra.
 
     MS:4000154:
     "The rate of identified quantification data points for the interquartile
@@ -1367,7 +1404,7 @@ def rt_iqr_rate(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     Example:
         >>> rate = rt_iqr_rate(exp, ms_level=1)
     """
-    specs = _filter_by_mslevel(exp, ms_level)
+    specs = _select_spectra(exp, ms_level, accepted_native_ids)
     rts = _rts(specs)
     if rts.size == 0: return np.nan
     qs = np.quantile(rts, [0.25, 0.75])
@@ -1507,10 +1544,14 @@ def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int =
     if q5 == 0: return np.nan
     return float(q95 / q5)
 
-def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1,
+                      accepted_native_ids: Optional[set] = None) -> float:
     """
-    Median of TIC values in the RT range in which the middle half of
-    quantification data points are identified (MS:4000158).
+    ID-free proxy for the median TIC over the middle-half RT range (MS:4000158).
+
+    MS:4000158 is ID-based. Without identifications this is computed over all
+    spectra of the MS level (ID-free proxy, emitted without the accession);
+    ``accepted_native_ids`` restricts it to identified spectra.
 
     MS:4000158:
     "Median of TIC values in the RT range in which half of quantification data
@@ -1547,7 +1588,7 @@ def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     Example:
         >>> median_tic = median_tic_rt_iqr(exp, ms_level=1)
     """
-    specs = _filter_by_mslevel(exp, ms_level)
+    specs = _select_spectra(exp, ms_level, accepted_native_ids)
     if not specs: return np.nan
     specs = sorted(specs, key=lambda s: s.getRT())
     tic = _ion_counts(specs)
@@ -1559,10 +1600,14 @@ def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     sel = (ind == 2) | (ind == 3)
     return _nanmedian(tic[sel])
 
-def median_tic_of_rt_range(exp: oms.MSExperiment, ms_level: int = 1) -> float:
+def median_tic_of_rt_range(exp: oms.MSExperiment, ms_level: int = 1,
+                           accepted_native_ids: Optional[set] = None) -> float:
     """
-    Median of TIC values in the shortest RT range in which half of the
-    quantification data points are identified (MS:4000159).
+    ID-free proxy for the median TIC over the shortest half-RT range (MS:4000159, MS1-2B).
+
+    MS:4000159 is ID-based. Without identifications this is computed over all
+    spectra of the MS level (ID-free proxy, emitted without the accession);
+    ``accepted_native_ids`` restricts it to identified spectra.
 
     MS:4000159:
     "Median of TIC values in the shortest RT range in which half of the
@@ -1601,7 +1646,7 @@ def median_tic_of_rt_range(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     Example:
         >>> median_tic = median_tic_of_rt_range(exp, ms_level=1)
     """
-    specs = _filter_by_mslevel(exp, ms_level)
+    specs = _select_spectra(exp, ms_level, accepted_native_ids)
     n = len(specs)
     if n == 0: return np.nan
     specs = sorted(specs, key=lambda s: s.getRT())
