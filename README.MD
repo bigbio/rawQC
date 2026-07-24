@@ -27,7 +27,7 @@ uv venv
 source .venv/bin/activate  # On Windows: .venv\Scripts\activate
 
 # Optional: install the latest pyOpenMS package, to enable latest features:
-uv pip install --upgrade pyopenms --index-url https://pypi.cs.uni-tuebingen.de/simple/
+uv pip install --upgrade pyopenms --index-url https://pypi.openms.de/simple/
 
 # Install the package
 uv pip install -e .
