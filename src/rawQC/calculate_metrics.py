@@ -670,13 +670,26 @@ def _nanmedian(arr: Union[np.ndarray, List[float]]) -> float:
 # -------------------------------------------------------------------------
 # Helper functions for polarity and chromatogram analysis
 # -------------------------------------------------------------------------
+def _enum_int(member: Any) -> int:
+    """Integer value of a pyOpenMS enum member, across binding generations.
+
+    pyOpenMS <= 3.5 exposes enum members as plain ints (``int(member)`` works);
+    pyOpenMS 3.6 switched to Python ``enum.Enum`` objects whose integer is on
+    ``.value`` and for which ``int(member)`` raises ``TypeError``. Handle both.
+    """
+    try:
+        return int(member)
+    except (TypeError, ValueError):
+        return int(member.value)
+
+
 def _enum_name_map(enum_cls: Any) -> Dict[int, str]:
     """Build an ``int -> member-name`` mapping for a pyOpenMS enum class.
 
-    pyOpenMS 3.4.0 removed the ``*ToString`` binding helpers that older code
-    relied on (``IonSource.polarityToString`` etc.), but the enum members are
-    still exposed as class attributes. This reconstructs the reverse mapping
-    from those members so conversions work on the declared minimum version.
+    pyOpenMS 3.4/3.5 removed the ``*ToString`` binding helpers that older code
+    relied on (``IonSource.polarityToString`` etc.), so conversions are
+    reconstructed from the enum members exposed as class attributes. This works
+    regardless of whether members are ints (<= 3.5) or Enum objects (3.6).
     """
     mapping: Dict[int, str] = {}
     for member in dir(enum_cls):
@@ -686,20 +699,20 @@ def _enum_name_map(enum_cls: Any) -> Dict[int, str]:
         if member.startswith("_") or member == "getMapping" or "SIZE_OF" in member:
             continue
         try:
-            mapping[int(getattr(enum_cls, member))] = member
-        except (TypeError, ValueError):
+            mapping[_enum_int(getattr(enum_cls, member))] = member
+        except (TypeError, ValueError, AttributeError):
             continue
     return mapping
 
 
 # Reverse enum maps computed once at import time.
 _POLARITY_NAMES = {
-    int(oms.IonSource.Polarity.POSITIVE): "positive",
-    int(oms.IonSource.Polarity.NEGATIVE): "negative",
+    _enum_int(oms.IonSource.Polarity.POSITIVE): "positive",
+    _enum_int(oms.IonSource.Polarity.NEGATIVE): "negative",
 }
 _SPECTRUM_TYPE_NAMES = {
-    int(oms.SpectrumSettings.SpectrumType.CENTROID): "centroid",
-    int(oms.SpectrumSettings.SpectrumType.PROFILE): "profile",
+    _enum_int(oms.SpectrumSettings.SpectrumType.CENTROID): "centroid",
+    _enum_int(oms.SpectrumSettings.SpectrumType.PROFILE): "profile",
 }
 _ACTIVATION_METHOD_NAMES = _enum_name_map(oms.Precursor.ActivationMethod)
 _ANALYZER_TYPE_NAMES = _enum_name_map(oms.MassAnalyzer.AnalyzerType)
@@ -719,7 +732,7 @@ def _polarity_to_str(pol: Any) -> str:
     Returns:
         str: "positive", "negative", or "unknown"
     """
-    return _POLARITY_NAMES.get(int(pol), "unknown")
+    return _POLARITY_NAMES.get(_enum_int(pol), "unknown")
 
 
 def _spectrum_type_to_str(spectrum_type: Any) -> str:
@@ -727,17 +740,17 @@ def _spectrum_type_to_str(spectrum_type: Any) -> str:
 
     Returns "centroid", "profile", or "unknown".
     """
-    return _SPECTRUM_TYPE_NAMES.get(int(spectrum_type), "unknown")
+    return _SPECTRUM_TYPE_NAMES.get(_enum_int(spectrum_type), "unknown")
 
 
 def _activation_method_to_str(method: Any) -> str:
     """Convert a ``Precursor.ActivationMethod`` enum value to its short name."""
-    return _ACTIVATION_METHOD_NAMES.get(int(method), "unknown")
+    return _ACTIVATION_METHOD_NAMES.get(_enum_int(method), "unknown")
 
 
 def _analyzer_type_to_str(analyzer_type: Any) -> str:
     """Convert a ``MassAnalyzer.AnalyzerType`` enum value to its name."""
-    return _ANALYZER_TYPE_NAMES.get(int(analyzer_type), "unknown")
+    return _ANALYZER_TYPE_NAMES.get(_enum_int(analyzer_type), "unknown")
 
 
 def _faims_compensation_voltages(exp: oms.MSExperiment) -> List[float]:

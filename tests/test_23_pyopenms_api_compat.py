@@ -93,6 +93,22 @@ def test_enum_string_converters():
     assert _analyzer_type_to_str(oms.MassAnalyzer.AnalyzerType.TOF) == "TOF"
 
 
+def test_enum_int_handles_both_binding_generations():
+    # pyOpenMS <= 3.5 exposes enum members as ints; 3.6 switched to enum.Enum
+    # objects (int() raises; the value is on .value). _enum_int handles both, so
+    # the converters work across versions. This exercises both branches
+    # regardless of which pyopenms is installed.
+    import enum as _enum
+    from rawQC.calculate_metrics import _enum_int
+
+    assert _enum_int(3) == 3  # int-based (<= 3.5)
+
+    class _FakePolarity(_enum.Enum):
+        POSITIVE = 1
+
+    assert _enum_int(_FakePolarity.POSITIVE) == 1  # Enum-based (3.6)
+
+
 def test_faims_voltages_extracted():
     exp = _experiment_with_two_analyzers()
     cvs = _faims_compensation_voltages(exp)
