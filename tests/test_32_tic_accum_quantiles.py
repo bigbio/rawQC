@@ -64,6 +64,15 @@ def test_front_loaded_tic():
     assert vals == [0.0, 0.0, 0.0, 1.0]
 
 
+def test_nan_rt_is_dropped_not_all_nan():
+    # A stray non-finite RT must be filtered before ordering; otherwise the
+    # remaining scans stay unsorted and the whole tuple degrades to NaN.
+    exp = _exp([_spec(2.0, 1, 2.0), _spec(float("nan"), 1, 0.0), _spec(1.0, 1, 1.0)])
+    vals = tic_quantile_rt_fraction(exp, 1)
+    assert all(np.isfinite(v) for v in vals)
+    assert abs(sum(vals) - 1.0) < 1e-12
+
+
 def test_emitted_as_single_ntuple():
     exp = _exp([_spec(rt, 1, 1.0) for rt in range(101)])
     m = compute_qc_metrics(exp)

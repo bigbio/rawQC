@@ -1649,13 +1649,17 @@ def tic_quantile_rt_fraction(exp: oms.MSExperiment, ms_level: int = 1) -> List[f
     specs = _filter_by_mslevel(exp, ms_level)
     if not specs:
         return [np.nan] * 4
-    specs = sorted(specs, key=lambda s: s.getRT())
     rts = _rts(specs)
     tic = _ion_counts(specs)
-    finite = np.isfinite(rts)
+    # Drop non-finite pairs BEFORE ordering: sorting spectra by a NaN retention
+    # time is unreliable, so filtering after the sort would leave the arrays
+    # unsorted and make rts[0]/rts[-1] and the cumulative TIC meaningless.
+    finite = np.isfinite(rts) & np.isfinite(tic)
     rts, tic = rts[finite], tic[finite]
     if rts.size < 2:
         return [np.nan] * 4
+    order = np.argsort(rts)
+    rts, tic = rts[order], tic[order]
     rtmin, rtmax = float(rts[0]), float(rts[-1])
     duration = rtmax - rtmin
     if duration <= 0:
