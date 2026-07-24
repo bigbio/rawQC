@@ -890,6 +890,14 @@ def tic_quartile_to_quartile_log_ratio(exp: oms.MSExperiment, ms_level: int = 1,
         list: Three float values representing log ratios [Q2/Q1, Q3/Q2, Q4/Q3]
               or [Q2/Q1, Q3/Q1, Q4/Q1] depending on relative_to parameter
 
+    Note:
+        For ``mode="TIC_change"`` (MS:4000186) the scan-to-scan changes are taken
+        as *absolute* differences. The PSI-MS term explicitly calls the triplet
+        "the original QuaMeter metrics", and QuaMeter computes the change with
+        ``fabs``. Using signed ``diff`` (as MsQuality does) can yield negative
+        quartiles whose ratios/logs are undefined (NaN); the absolute-change
+        definition keeps every quartile non-negative and QuaMeter-compatible.
+
     Example:
         >>> ratios_change = tic_quartile_to_quartile_log_ratio(exp, mode="TIC_change")
         >>> ratios_tic = tic_quartile_to_quartile_log_ratio(exp, mode="TIC")
@@ -900,7 +908,9 @@ def tic_quartile_to_quartile_log_ratio(exp: oms.MSExperiment, ms_level: int = 1,
     tic = _ion_counts(specs)
     if mode == "TIC_change":
         if tic.size < 2: return [np.nan, np.nan, np.nan]
-        tic = np.diff(tic)
+        # Absolute scan-to-scan change, matching the original QuaMeter fabs()
+        # definition referenced by MS:4000186 (see Note above).
+        tic = np.abs(np.diff(tic))
     qs = np.quantile(tic, [0, 0.25, 0.50, 0.75, 1.0])
     q1, q2, q3, q4 = qs[1], qs[2], qs[3], qs[4]
     with np.errstate(divide='ignore', invalid='ignore'):
