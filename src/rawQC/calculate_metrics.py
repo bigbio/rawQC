@@ -2762,6 +2762,53 @@ def extract_instrument_metadata(exp: oms.MSExperiment) -> Dict[str, str]:
 # -------------------------------------------------------------------------
 # Build mzQC with accessions
 # -------------------------------------------------------------------------
+import re as _re
+
+# PSI-MS CV version rawQC's MS:* accessions are taken from. Update alongside the
+# accessions; recorded in the generated file rather than a stale hard-coded value.
+PSI_MS_CV_VERSION = "4.1.257"
+
+# Local CV for rawQC custom metrics that have no PSI-MS accession. Every emitted
+# quality metric must carry an accession matching ^[A-Z]+:[A-Z0-9]+$ (mzQC
+# schema); custom metrics use a deterministic LOCAL:* accession from this CV.
+_LOCAL_CV = qc.ControlledVocabulary(
+    name="rawQC local quality metrics",
+    version="1",
+    uri="https://github.com/bigbio/rawQC",
+)
+
+# Instrument-metadata keys with a well-defined PSI-MS accession; others use LOCAL.
+_INSTRUMENT_CV_ACCESSIONS = {
+    "Instrument model name": ("MS:1000031", "instrument model"),
+    "Software": ("MS:1000531", "software"),
+}
+
+
+def _local_accession(name: str) -> str:
+    """Deterministic schema-valid LOCAL accession for a custom metric name."""
+    suffix = _re.sub(r"[^A-Z0-9]", "", name.upper())
+    return f"LOCAL:{suffix or 'UNNAMED'}"
+
+
+def _jsonify_value(v: Any) -> Any:
+    """Coerce a metric value to a JSON-serialisable form (scalar/array/table)."""
+    def _clean(x):
+        if x is None or (isinstance(x, float) and not np.isfinite(x)):
+            return None
+        return x
+
+    if v is None or (isinstance(v, float) and not np.isfinite(v)):
+        return None
+    if isinstance(v, (int, float, str)):
+        return v
+    if isinstance(v, (list, tuple)):
+        return [_clean(x) for x in v]
+    if isinstance(v, dict):
+        return {k: ([_clean(x) for x in col] if isinstance(col, (list, tuple)) else _clean(col))
+                for k, col in v.items()}
+    return str(v)
+
+
 def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
     """
     Build mzQC JSON from multiple runs.
@@ -2783,13 +2830,16 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
     )
     cv_ms = qc.ControlledVocabulary(
         name="Proteomics Standards Initiative Mass Spectrometry Ontology",
-        version="4.1.7",
+        version=PSI_MS_CV_VERSION,
         uri="https://github.com/HUPO-PSI/psi-ms-CV/blob/master/psi-ms.obo"
     )
 
+    # AnalysisSoftware is a CV term and must carry a valid accession; use the
+    # generic PSI-MS "software" term (MS:1000531).
     anso = qc.AnalysisSoftware(
+        accession="MS:1000531",
         name="pyOpenMS",
-        version="3.x",
+        version=str(getattr(oms, "__version__", "3.x")),
         uri="https://www.openms.de",
         description="OpenMS Python bindings used for ID-free QC metric computation and metadata extraction"
     )
@@ -2802,9 +2852,20 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
         metrics_dict = run_info['metrics']
         instrument_metadata = run_info['instrument_metadata']
 
+        # Instrument/input metadata belongs in the metadata structure, not in
+        # qualityMetrics: attach it as fileProperties (CvParameters) of the input.
+        file_properties = []
+        for k, v in instrument_metadata.items():
+            if v is None or v == "":
+                continue
+            acc, cv_name = _INSTRUMENT_CV_ACCESSIONS.get(k, (_local_accession(k), k))
+            file_properties.append(qc.CvParameter(
+                accession=acc, name=cv_name, value=_jsonify_value(v)))
+
         infi = qc.InputFile(name=input_name,
                             location=mzml_file,
-                            fileFormat=qc.CvParameter(accession="MS:1000584", name="mzML format"))
+                            fileFormat=qc.CvParameter(accession="MS:1000584", name="mzML format"),
+                            fileProperties=file_properties)
 
         meta = qc.MetaDataParameters(
             inputFiles=[infi],
@@ -2814,32 +2875,18 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
 
         qmetrics = []
         for k, v in metrics_dict.items():
-            # ensure scalar JSON value
-            if v is None or (isinstance(v, float) and not np.isfinite(v)):
-                val = None
-            elif isinstance(v, (int, float, str)):
-                val = v
-            else:
-                val = str(v)
-
-            # Fetch combined metadata (accession + description) for each QC metric
             metric_meta = METRIC_METADATA.get(k, {})
-            description = metric_meta.get("description") or "ID-free QC metric (MsQuality Spectra metrics translated to pyOpenMS)"
-            accession = metric_meta.get("accession")
+            description = metric_meta.get("description") or "rawQC ID-free QC metric"
+            # Every emitted metric must have a valid accession + name. Use the
+            # PSI-MS accession where declared; otherwise a deterministic LOCAL:*
+            # accession backed by the rawQC local CV (custom metric).
+            accession = metric_meta.get("accession") or _local_accession(k)
 
             qmetrics.append(qc.QualityMetric(
                 name=k,
-                accession=accession,  # include CV accession where known
-                value=val,
+                accession=accession,
+                value=_jsonify_value(v),
                 description=description
-            ))
-
-        # add descriptive instrument / LC info
-        for k, v in instrument_metadata.items():
-            qmetrics.append(qc.QualityMetric(
-                name=f"Instrument {k}",
-                value=str(v),
-                description="Extracted instrument metadata"
             ))
 
         rq = qc.RunQuality(metadata=meta, qualityMetrics=qmetrics)
@@ -2850,9 +2897,9 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
         creationDate=datetime.now().isoformat(),
         runQualities=run_qualities,
         setQualities=[],
-        controlledVocabularies=[cv_qc, cv_ms]
+        controlledVocabularies=[cv_qc, cv_ms, _LOCAL_CV]
     )
-    
+
     json_str = json.dumps(json.loads(qc.JsonSerialisable.to_json(mzqc_obj)), indent=2)
     return json_str
 
@@ -2929,6 +2976,16 @@ def parse_mzqc_metrics(json_str: str) -> Tuple[List[str], Dict[str, Dict[str, An
             prev_qc_keys = set(qc_metrics_dict.keys())
             prev_instr_keys = set(instrument_metrics_dict.keys())
 
+            # Instrument/input metadata now lives in the metadata structure as
+            # inputFile fileProperties, not as quality metrics.
+            file_properties = (input_files[0].get('fileProperties') or []) if input_files else []
+            for prop in file_properties:
+                clean_name = prop.get('name', '')
+                if clean_name not in instrument_metrics_dict:
+                    instrument_metrics_dict[clean_name] = [format_value(None)] * run_idx
+                instrument_metrics_dict[clean_name].append(format_value(prop.get('value')))
+                seen_instr_this_run.add(clean_name)
+
             for metric in metrics:
                 name = metric['name']
                 value = metric.get('value')
@@ -2937,26 +2994,17 @@ def parse_mzqc_metrics(json_str: str) -> Tuple[List[str], Dict[str, Dict[str, An
 
                 formatted_value = format_value(value)
 
-                if name.startswith('Instrument '):
-                    clean_name = name[11:]
-                    if clean_name not in instrument_metrics_dict:
-                        # First time we see this instrument metric -> pad previous runs
-                        instrument_metrics_dict[clean_name] = [format_value(None)] * run_idx
-                    instrument_metrics_dict[clean_name].append(formatted_value)
-                    seen_instr_this_run.add(clean_name)
-
-                else:
-                    # QC metrics - store with accession and description
-                    if name not in qc_metrics_dict:
-                        # First time we see this metric -> pad previous runs
-                        qc_metrics_dict[name] = {
-                            'values': [format_value(None)] * run_idx,
-                            'accession': accession,
-                            'description': description
-                        }
-                    # If we already have metadata, keep the first occurrence's accession/description
-                    qc_metrics_dict[name]['values'].append(formatted_value)
-                    seen_qc_this_run.add(name)
+                # QC metrics - store with accession and description
+                if name not in qc_metrics_dict:
+                    # First time we see this metric -> pad previous runs
+                    qc_metrics_dict[name] = {
+                        'values': [format_value(None)] * run_idx,
+                        'accession': accession,
+                        'description': description
+                    }
+                # If we already have metadata, keep the first occurrence's accession/description
+                qc_metrics_dict[name]['values'].append(formatted_value)
+                seen_qc_this_run.add(name)
 
             # Append placeholder for any previously known metrics not present in this run
             missing_qc = prev_qc_keys - seen_qc_this_run
