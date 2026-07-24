@@ -1456,7 +1456,9 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     Note:
         This function interprets the quantiles from [PSI:MS] definition as
         quartiles, i.e. the 0, 25, 50, 75 and 100% quantiles are used.
-        The sum of the TIC is returned as an equivalent to the area.
+        Consistent with issue #30, each quartile value is a trapezoidal time
+        integral of the TIC over its RT sub-interval (intensity x second), not a
+        per-spectrum sum; the four values sum to the whole-run integral.
 
     Args:
         exp: MSExperiment object
@@ -1473,21 +1475,21 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     specs = sorted(specs, key=lambda s: s.getRT())
     rts = _rts(specs)
     tic = _ion_counts(specs)
+    finite = np.isfinite(rts) & np.isfinite(tic)
+    rts, tic = rts[finite], tic[finite]
+    if rts.size < 2:
+        return [np.nan] * 4
     qs = np.quantile(rts, [0.0, 0.25, 0.50, 0.75, 1.0])
-    m1 = (rts > qs[0]) & (rts <= qs[1])
-    m2 = (rts > qs[1]) & (rts <= qs[2])
-    m3 = (rts > qs[2]) & (rts <= qs[3])
-    m4 = (rts > qs[3]) & (rts <= qs[4])
-    # Integrate the TIC over retention time within each quartile (trapezoidal),
-    # consistent with the area-under-curve decision for issue #30; a bin with
-    # fewer than two scans has no RT interval and contributes 0.
-    out = []
-    for m in (m1, m2, m3, m4):
-        if int(np.sum(m)) >= 2:
-            out.append(_trapz(tic[m], rts[m]))
-        else:
-            out.append(0.0)
-    return out
+    # Integrate the TIC over retention time (issue #30, area-under-curve), then
+    # split the integral at the quartile RT boundaries. Using the CUMULATIVE
+    # trapezoidal integral and interpolating at each boundary correctly handles
+    # partial trapezoids that straddle a boundary and never spuriously collapses
+    # a sparse quartile to 0 (the earlier per-bin "<2 scans -> 0" rule did). The
+    # four areas sum to the whole-run trapezoidal integral.
+    seg = 0.5 * (tic[1:] + tic[:-1]) * (rts[1:] - rts[:-1])
+    cumint = np.concatenate(([0.0], np.cumsum(seg)))  # integral from rts[0] to rts[i]
+    bounds = np.interp(qs, rts, cumint)                # cumulative area at each quartile RT
+    return [float(bounds[i + 1] - bounds[i]) for i in range(4)]
 
 def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int = 2) -> float:
     """
