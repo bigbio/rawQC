@@ -389,7 +389,7 @@ METRIC_METADATA = {
     },
     "TIC_MS1_Area": {
         "accession": "MS:4000029",
-        "description": "Sum of all MS1 TIC values (area under the total ion chromatogram)."
+        "description": "Time integral of the MS1 TIC over retention time (area under the total ion chromatogram; intensity x second)."
     },
 
     # Extent of precursor intensity
@@ -528,7 +528,7 @@ METRIC_METADATA = {
     # Metrics lacking PSI:MS descriptions
     "TIC_MS2_Area": {
         "accession": "MS:4000030",
-        "description": "Sum of all MS2 TIC values (area under the total ion chromatogram)."
+        "description": "Time integral of the MS2 TIC over retention time (area under the total ion chromatogram; intensity x second)."
     },
     "MS_Run_Duration": {
         "accession": "MS:4000067",
@@ -702,6 +702,11 @@ def _iqr(arr: Union[np.ndarray, List[float]]) -> float:
     if arr.size == 0: return np.nan
     q75, q25 = np.percentile(arr, [75, 25])
     return float(q75 - q25)
+
+def _trapz(y: np.ndarray, x: np.ndarray) -> float:
+    """Trapezoidal integral of y over x (numpy 1.x/2.x compatible)."""
+    fn = getattr(np, "trapezoid", None) or np.trapz
+    return float(fn(y, x))
 
 def _nanmedian(arr: Union[np.ndarray, List[float]]) -> float:
     """
@@ -1487,9 +1492,15 @@ def area_under_tic(exp: oms.MSExperiment, ms_level: int = 1) -> float:
     MS:4000155:
     "The area under the total ion chromatogram." [PSI:MS]
 
+    Decision (issue #30): the CV terms MS:4000029/MS:4000030/MS:4000155 describe
+    an *area under a curve*, so rawQC computes a true **time integral** of the
+    TIC against retention time (trapezoidal rule), not a bare per-spectrum sum.
+    On irregularly sampled data a sum is not an area and has different
+    dimensions. Unit: intensity x second.
+
     The metric is calculated as follows:
-    (1) The spectra are filtered according to the MS level,
-    (2) The sum of the ion counts are obtained and returned.
+    (1) The spectra are filtered according to the MS level and ordered by RT,
+    (2) The TIC (ion count) is integrated over retention time (trapezoidal).
 
     Details:
         MS:4000155
@@ -1498,20 +1509,34 @@ def area_under_tic(exp: oms.MSExperiment, ms_level: int = 1) -> float:
         relationship: has_metric_category MS:4000017 ! chromatogram metric
 
     Note:
-        The sum of the TIC is returned as an equivalent to the area.
+        Requires at least two finite-RT spectra to define a time interval;
+        otherwise NaN is returned (an area needs a non-zero RT span).
 
     Args:
         exp: MSExperiment object
         ms_level: int, MS level to analyze (default: 1)
 
     Returns:
-        float: Sum of total ion counts (area under TIC)
+        float: Time integral of the TIC over retention time (area under TIC)
 
     Example:
         >>> area = area_under_tic(exp, ms_level=1)
     """
     specs = _filter_by_mslevel(exp, ms_level)
-    return float(np.nansum(_ion_counts(specs))) if specs else np.nan
+    if not specs:
+        return np.nan
+    rts = _rts(specs)
+    tic = _ion_counts(specs)
+    # Drop non-finite pairs BEFORE ordering: sorting spectra by a NaN retention
+    # time is unreliable (NaN comparisons are false), which would leave the
+    # arrays unsorted and yield a negative "area" from the trapezoidal rule.
+    finite = np.isfinite(rts) & np.isfinite(tic)
+    rts, tic = rts[finite], tic[finite]
+    if rts.size < 2:
+        return np.nan
+    order = np.argsort(rts)
+    rts, tic = rts[order], tic[order]
+    return _trapz(tic, rts)
 
 def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> List[float]:
     """
@@ -1539,7 +1564,9 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     Note:
         This function interprets the quantiles from [PSI:MS] definition as
         quartiles, i.e. the 0, 25, 50, 75 and 100% quantiles are used.
-        The sum of the TIC is returned as an equivalent to the area.
+        Consistent with issue #30, each quartile value is a trapezoidal time
+        integral of the TIC over its RT sub-interval (intensity x second), not a
+        per-spectrum sum; the four values sum to the whole-run integral.
 
     Args:
         exp: MSExperiment object
@@ -1553,15 +1580,26 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     """
     specs = _filter_by_mslevel(exp, ms_level)
     if len(specs) == 0: return [np.nan]*4
-    specs = sorted(specs, key=lambda s: s.getRT())
     rts = _rts(specs)
     tic = _ion_counts(specs)
+    # Drop non-finite pairs before ordering (see area_under_tic).
+    finite = np.isfinite(rts) & np.isfinite(tic)
+    rts, tic = rts[finite], tic[finite]
+    if rts.size < 2:
+        return [np.nan] * 4
+    order = np.argsort(rts)
+    rts, tic = rts[order], tic[order]
     qs = np.quantile(rts, [0.0, 0.25, 0.50, 0.75, 1.0])
-    q1 = tic[(rts > qs[0]) & (rts <= qs[1])]
-    q2 = tic[(rts > qs[1]) & (rts <= qs[2])]
-    q3 = tic[(rts > qs[2]) & (rts <= qs[3])]
-    q4 = tic[(rts > qs[3]) & (rts <= qs[4])]
-    return [float(np.nansum(q)) for q in (q1, q2, q3, q4)]
+    # Integrate the TIC over retention time (issue #30, area-under-curve), then
+    # split the integral at the quartile RT boundaries. Using the CUMULATIVE
+    # trapezoidal integral and interpolating at each boundary correctly handles
+    # partial trapezoids that straddle a boundary and never spuriously collapses
+    # a sparse quartile to 0 (the earlier per-bin "<2 scans -> 0" rule did). The
+    # four areas sum to the whole-run trapezoidal integral.
+    seg = 0.5 * (tic[1:] + tic[:-1]) * (rts[1:] - rts[:-1])
+    cumint = np.concatenate(([0.0], np.cumsum(seg)))  # integral from rts[0] to rts[i]
+    bounds = np.interp(qs, rts, cumint)                # cumulative area at each quartile RT
+    return [float(bounds[i + 1] - bounds[i]) for i in range(4)]
 
 def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int = 2) -> float:
     """
