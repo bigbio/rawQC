@@ -1,6 +1,6 @@
 """Regression tests for issue #23.
 
-rawQC declares ``pyopenms>=3.4.0`` but previously called ``*ToString`` binding
+rawQC declares ``pyopenms>=3.5.0`` but previously called ``*ToString`` binding
 helpers and ``FAIMSHelper`` that do not exist in that version, so polarity,
 peak-type, activation, analyzer, and FAIMS handling either silently degraded or
 aborted ``compute_qc_metrics``. These tests build a synthetic experiment that
@@ -128,7 +128,7 @@ def test_peak_type_and_activation_and_analyzer_paths():
 
 
 def test_compute_qc_metrics_runs_end_to_end():
-    """The whole pipeline must run on pyopenms 3.4.0 without raising."""
+    """The whole pipeline must run on the declared minimum pyopenms without raising."""
     exp = _experiment_with_two_analyzers()
     metrics = compute_qc_metrics(exp)
     # Polarity resolved (not silently 'unknown').

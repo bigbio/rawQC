@@ -718,7 +718,7 @@ _ACTIVATION_METHOD_NAMES = _enum_name_map(oms.Precursor.ActivationMethod)
 _ANALYZER_TYPE_NAMES = _enum_name_map(oms.MassAnalyzer.AnalyzerType)
 
 # Metavalue key under which OpenMS stores the FAIMS compensation voltage
-# (mirrors OpenMS' FAIMSHelper, which is not bound in pyOpenMS 3.4.0).
+# (mirrors OpenMS' FAIMSHelper, which is not bound in pyOpenMS 3.4/3.5).
 _FAIMS_CV_KEY = "FAIMS_CV"
 
 
@@ -757,7 +757,7 @@ def _faims_compensation_voltages(exp: oms.MSExperiment) -> List[float]:
     """Collect distinct FAIMS compensation voltages present in the run.
 
     Replacement for OpenMS' ``FAIMSHelper::getCompensationVoltages`` (not bound
-    in pyOpenMS 3.4.0): iterate spectra and read the ``FAIMS_CV`` metavalue.
+    in pyOpenMS 3.4/3.5): iterate spectra and read the ``FAIMS_CV`` metavalue.
     """
     voltages = set()
     for spec in exp:
