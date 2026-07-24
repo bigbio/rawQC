@@ -37,7 +37,11 @@ def _ms1(rt, mzs, intens, polarity=oms.IonSource.Polarity.POSITIVE,
     sp.setInstrumentSettings(ins)
     sp.setType(stype)
     if faims_cv is not None:
-        sp.setMetaValue("FAIMS_CV", float(faims_cv))
+        # OpenMS stores a FAIMS compensation voltage as the spectrum drift time
+        # with unit FAIMS_COMPENSATION_VOLTAGE (this is what MzMLHandler writes
+        # for MS:1001581 and what FAIMSHelper reads).
+        sp.setDriftTime(float(faims_cv))
+        sp.setDriftTimeUnit(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
     return sp
 
 
@@ -113,6 +117,16 @@ def test_faims_voltages_extracted():
     exp = _experiment_with_two_analyzers()
     cvs = _faims_compensation_voltages(exp)
     assert cvs == [-55.0, -45.0]
+
+
+def test_faims_reader_matches_native_when_available():
+    # Where the native FAIMSHelper is bound (pyopenms 3.6+), our reimplementation
+    # must return exactly the same compensation voltages.
+    exp = _experiment_with_two_analyzers()
+    if not hasattr(oms, "FAIMSHelper"):
+        pytest.skip("FAIMSHelper not bound in this pyopenms")
+    native = sorted(float(x) for x in oms.FAIMSHelper.getCompensationVoltages(exp))
+    assert _faims_compensation_voltages(exp) == native
 
 
 def test_peak_type_and_activation_and_analyzer_paths():

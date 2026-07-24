@@ -772,10 +772,6 @@ _SPECTRUM_TYPE_NAMES = {
 _ACTIVATION_METHOD_NAMES = _enum_name_map(oms.Precursor.ActivationMethod)
 _ANALYZER_TYPE_NAMES = _enum_name_map(oms.MassAnalyzer.AnalyzerType)
 
-# Metavalue key under which OpenMS stores the FAIMS compensation voltage
-# (mirrors OpenMS' FAIMSHelper, which is not bound in pyOpenMS 3.4/3.5).
-_FAIMS_CV_KEY = "FAIMS_CV"
-
 
 def _polarity_to_str(pol: Any) -> str:
     """
@@ -811,16 +807,25 @@ def _analyzer_type_to_str(analyzer_type: Any) -> str:
 def _faims_compensation_voltages(exp: oms.MSExperiment) -> List[float]:
     """Collect distinct FAIMS compensation voltages present in the run.
 
-    Replacement for OpenMS' ``FAIMSHelper::getCompensationVoltages`` (not bound
-    in pyOpenMS 3.4/3.5): iterate spectra and read the ``FAIMS_CV`` metavalue.
+    Reimplements OpenMS' ``FAIMSHelper::getCompensationVoltages`` (not bound in
+    pyOpenMS 3.4/3.5). OpenMS' mzML reader stores a FAIMS compensation voltage
+    (``MS:1001581``) as the spectrum *drift time* with unit
+    ``FAIMS_COMPENSATION_VOLTAGE`` (see OpenMS MzMLHandler and FAIMSHelper), NOT
+    as a metavalue -- so the CV is ``getDriftTime()`` for every spectrum whose
+    ``getDriftTimeUnit()`` is that FAIMS unit. This matches the native
+    FAIMSHelper exactly on 3.6.
     """
+    faims_unit = _enum_int(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
     voltages = set()
     for spec in exp:
-        if spec.metaValueExists(_FAIMS_CV_KEY):
-            try:
-                voltages.add(float(spec.getMetaValue(_FAIMS_CV_KEY)))
-            except (TypeError, ValueError):
+        try:
+            if _enum_int(spec.getDriftTimeUnit()) != faims_unit:
                 continue
+            dt = float(spec.getDriftTime())
+        except (TypeError, ValueError, AttributeError):
+            continue
+        if np.isfinite(dt):
+            voltages.add(dt)
     return sorted(voltages)
 
 def _extract_spectrum_polarity(spec: oms.MSSpectrum) -> str:
