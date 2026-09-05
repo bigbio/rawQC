@@ -7,8 +7,24 @@ import pyopenms as oms
 from mzqc import MZQCFile as qc
 from typing import List, Tuple, Dict, Any, Optional, Union
 import os
+from pathlib import Path
 import click
 import textwrap
+
+# Preserve the public metric imports while keeping acquisition-specific code separate.
+from .dda import (
+    _precursor_values,
+    charge_metrics,
+    compute_dda_metrics,
+    extent_identified_precursor_intensity,
+    median_precursor_mz,
+    mz_acquisition_range,
+    precursor_intensities,
+    precursor_intensity_stats,
+)
+from .spectrum_utils import _filter_by_mslevel, _nanmedian, _select_spectra
+from .dia import DIA_METRIC_METADATA, compute_dia_metrics
+from .input import input_format, load_experiment, resolve_acquisition_mode
 
 # -------------------------------------------------------------------------
 # Demo data (replace with your own mzML files)
@@ -458,6 +474,16 @@ METRIC_METADATA = {
     # (a dead entry with a null description); removed in issue #44.
 }
 
+# Method-specific registrations share the same mzQC serialization and validation.
+DDA_METRIC_NAMES = {
+    "MzRange_MS2", "PrecursorMz_MS2_Median", "ExtentPrecursorIntensity_95over5_MS2",
+    "PrecursorIntensity_Q1", "PrecursorIntensity_Q2", "PrecursorIntensity_Q3",
+    "PrecursorIntensity_Mean", "PrecursorIntensity_Sd", "PrecursorIntensity_FallbackCount",
+    "ChargeMin", "ChargeMax", "ChargeRatio_3over2", "ChargeRatio_4over2",
+    "ChargeMean", "ChargeMedian", "MS2_PrecursorCharge_Fractions",
+}
+METRIC_METADATA.update(DIA_METRIC_METADATA)
+
 # Derived metadata lookups for convenience and validation
 
 METRIC_ACCESSIONS = {k: v["accession"] for k, v in METRIC_METADATA.items() if v["accession"] is not None}
@@ -588,12 +614,15 @@ def validate_metric_registry(computed: Dict[str, Any]) -> Dict[str, List[str]]:
     A test can assert every category is empty to catch registry/order/computation
     drift.
     """
+    # Each acquisition produces only the applicable method-specific group.
+    is_dia = "DIA_MS2_Count" in computed
+    inactive = DDA_METRIC_NAMES | {"TIC_MS2_Area"} if is_dia else set(DIA_METRIC_METADATA)
     uncovered = [k for k in computed
                  if k not in METRIC_METADATA and not _is_dynamic_metric(k)]
     ordered_missing_metadata = [k for k in METRIC_ORDER if k not in METRIC_METADATA]
-    ordered_not_computed = [k for k in METRIC_ORDER if k not in computed]
+    ordered_not_computed = [k for k in METRIC_ORDER if k not in computed and k not in inactive]
     registered_orphans = [k for k in METRIC_METADATA
-                          if k not in computed and not _is_dynamic_metric(k)]
+                          if k not in computed and k not in inactive and not _is_dynamic_metric(k)]
     return {
         "uncovered": uncovered,
         "ordered_missing_metadata": ordered_missing_metadata,
@@ -605,42 +634,7 @@ def validate_metric_registry(computed: Dict[str, Any]) -> Dict[str, List[str]]:
 # -------------------------------------------------------------------------
 # Utilities
 # -------------------------------------------------------------------------
-def _filter_by_mslevel(exp: oms.MSExperiment, level: int) -> List[oms.MSSpectrum]:
-    """
-    Filter MSExperiment spectra by MS level.
 
-    Args:
-        exp: MSExperiment object
-        level: int, MS level to filter (1, 2, 3, etc.)
-
-    Returns:
-        list: Spectra matching the specified MS level
-    """
-    return [s for s in exp if s.getMSLevel() == level]
-
-def _select_spectra(exp: oms.MSExperiment, level: int,
-                    accepted_native_ids: Optional[set] = None) -> List[oms.MSSpectrum]:
-    """
-    Filter spectra by MS level and, optionally, by accepted identifications.
-
-    When ``accepted_native_ids`` is None the result is every spectrum of the MS
-    level (the ID-free proxy). When a set of accepted spectrum native IDs is
-    supplied, only those spectra are kept, which realizes the ID-based PSI-MS
-    definition ("after user-defined acceptance criteria are applied").
-
-    Args:
-        exp: MSExperiment object
-        level: MS level to keep
-        accepted_native_ids: optional set of accepted spectrum native IDs
-
-    Returns:
-        list: selected spectra
-    """
-    specs = _filter_by_mslevel(exp, level)
-    if accepted_native_ids is not None:
-        wanted = set(accepted_native_ids)
-        specs = [s for s in specs if s.getNativeID() in wanted]
-    return specs
 
 def _rts(specs: List[oms.MSSpectrum]) -> np.ndarray:
     """
@@ -698,74 +692,8 @@ def _is_empty_spectrum(sp: oms.MSSpectrum) -> bool:
         return True
     return sp.calculateTIC() == 0.0
 
-def _precursor_values(specs: List[oms.MSSpectrum]) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """
-    Extract precursor m/z, intensity, and charge from MS2/MSn spectra.
-
-    Args:
-        specs: list of MSSpectrum objects
-
-    Returns:
-        tuple: (mzs, intensities, charges) as numpy arrays
-               NaN values indicate missing precursor information
-    """
-    mzs, intens, charges = [], [], []
-    for sp in specs:
-        precs = sp.getPrecursors()
-        if not precs:
-            mzs.append(np.nan); intens.append(np.nan); charges.append(np.nan)
-            continue
-        p = precs[0]
-        mzs.append(float(p.getMZ()) if p.getMZ() else np.nan)
-        # A present precursor keeps its recorded intensity, including a legitimate
-        # 0.0 (truthiness would silently turn 0.0 into NaN and drop it). Only an
-        # absent precursor (handled above) yields NaN.
-        intens.append(float(p.getIntensity()))
-        charges.append(int(p.getCharge()) if p.getCharge() else np.nan)
-    return np.array(mzs, dtype=float), np.array(intens, dtype=float), np.array(charges, dtype=float)
 
 
-def precursor_intensities(specs: List[oms.MSSpectrum],
-                          fallback_to_ms2_tic: bool = True) -> Tuple[np.ndarray, int, int]:
-    """
-    Extract MSn precursor intensities with an explicit zero/missing policy.
-
-    QuaMeter detects a zero or unrecorded precursor intensity and falls back to
-    the corresponding MSn (MS2) total ion current, so a recorded 0.0 is not
-    silently dropped. rawQC follows that convention by default:
-
-      * spectrum with no precursor      -> NaN (counted as ``n_missing``)
-      * precursor intensity <= 0        -> the spectrum's TIC (counted as
-                                           ``n_fallback``) when
-                                           ``fallback_to_ms2_tic`` is True,
-                                           otherwise the value 0.0 is preserved
-      * precursor intensity  > 0        -> that intensity
-
-    Args:
-        specs: list of MSSpectrum objects (typically MS2)
-        fallback_to_ms2_tic: apply the QuaMeter MS2-TIC fallback (default True)
-
-    Returns:
-        tuple: (intensities, n_fallback, n_missing)
-    """
-    vals: List[float] = []
-    n_fallback = 0
-    n_missing = 0
-    for sp in specs:
-        precs = sp.getPrecursors()
-        if not precs:
-            vals.append(np.nan)
-            n_missing += 1
-            continue
-        inten = float(precs[0].getIntensity())
-        if inten <= 0.0:
-            if fallback_to_ms2_tic:
-                inten = float(sp.calculateTIC())
-                n_fallback += 1
-            else:
-                inten = 0.0
-        vals.append(inten)
-    return np.array(vals, dtype=float), n_fallback, n_missing
 
 def _iqr(arr: Union[np.ndarray, List[float]]) -> float:
     """
@@ -790,19 +718,6 @@ def _trapz(y: np.ndarray, x: np.ndarray) -> float:
     fn = getattr(np, "trapezoid", None) or np.trapz
     return float(fn(y, x))
 
-def _nanmedian(arr: Union[np.ndarray, List[float]]) -> float:
-    """
-    Calculate median with NaN removal.
-
-    Args:
-        arr: array-like numeric data
-
-    Returns:
-        float: Median value, or NaN if no valid data
-    """
-    arr = np.asarray(arr, dtype=float)
-    arr = arr[~np.isnan(arr)]
-    return float(np.median(arr)) if arr.size else np.nan
 
 # -------------------------------------------------------------------------
 # Helper functions for polarity and chromatogram analysis
@@ -1208,47 +1123,6 @@ def peak_density_quantiles(exp: oms.MSExperiment, ms_level: int = 1,
     return [float(x) if np.isfinite(x) else np.nan for x in qs]
 
 
-def mz_acquisition_range(exp: oms.MSExperiment, ms_level: int = 2) -> Tuple[float, float]:
-    """
-    m/z acquisition range (MS:4000069).
-
-    MS:4000069:
-    "Upper and lower limit of m/z precursor values at which MSn spectra are
-    recorded." [PSI:MS]
-
-    The metric is calculated as follows:
-    (1) The spectra are filtered according to the MS level,
-    (2) The precursor m/z values of the peaks within the spectra are obtained,
-    (3) The minimum and maximum precursor m/z values are obtained and returned.
-
-    Details:
-        MS:4000069
-        is_a: MS:4000004 ! n-tuple
-        relationship: has_metric_category MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000019 ! MS metric
-        relationship: has_units MS:1000040 ! m/z
-        relationship: has_value_concept STATO:0000035 ! range
-
-    Note:
-        This reads precursor m/z values, so it is meaningful only for MSn
-        (ms_level >= 2). MS1 spectra have no precursor and would yield (NaN, NaN);
-        rawQC therefore does not emit an MS1 precursor m/z range.
-
-    Args:
-        exp: MSExperiment object
-        ms_level: int, MS level to analyze (default: 2)
-
-    Returns:
-        tuple: (min_mz, max_mz) as floats
-
-    Example:
-        >>> mz_min, mz_max = mz_acquisition_range(exp, ms_level=2)
-    """
-    specs = _filter_by_mslevel(exp, ms_level)
-    mzs, _, _ = _precursor_values(specs)
-    mzs = mzs[~np.isnan(mzs)]
-    if mzs.size == 0: return (np.nan, np.nan)
-    return (float(np.min(mzs)), float(np.max(mzs)))
 
 def rt_acquisition_range(exp: oms.MSExperiment, ms_level: int = 1) -> Tuple[float, float]:
     """
@@ -1400,116 +1274,7 @@ def number_empty_scans(exp: oms.MSExperiment, ms_level: int = 1) -> int:
     specs = _filter_by_mslevel(exp, ms_level)
     return int(np.sum([_is_empty_spectrum(s) for s in specs]))
 
-def precursor_intensity_stats(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]:
-    """
-    MS2 precursor intensity distribution (MS:4000116).
 
-    MS:4000116:
-    "From the distribution of MS2 precursor intensities, the quantiles. E.g. a
-    value triplet represents the quartiles Q1, Q2, Q3. The intensity
-    distribution of the precursors informs about the dynamic range of the
-    acquisition." [PSI:MS]
-
-    Also calculates mean (MS:4000117) and standard deviation (MS:4000118).
-
-    The metric is calculated as follows:
-    (1) The spectra are filtered according to the MS level,
-    (2) The intensity of the precursor ions within the spectra are obtained,
-    (3) The 25%, 50%, and 75% quantile, mean, and standard deviation of the
-        precursor intensity values are obtained (NA values are removed) and returned.
-
-    Details:
-        MS:4000116
-        is_a: MS:4000004 ! n-tuple
-        relationship: has_metric_category MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000022 ! MS2 metric
-        relationship: has_value_concept STATO:0000291 ! quantile
-        relationship: has_units MS:1000043 ! intensity unit
-
-        MS:4000117 (mean)
-        relationship: has_value_concept STATO:0000401 ! sample mean
-
-        MS:4000118 (sigma/sd)
-        relationship: has_value_concept STATO:0000237 ! standard deviation
-
-    Args:
-        exp: MSExperiment object
-        ms_level: int, MS level to analyze (default: 2)
-
-    Returns:
-        dict: Precursor intensity statistics (Q1, Q2, Q3, Mean, Sd)
-
-    Example:
-        >>> stats = precursor_intensity_stats(exp, ms_level=2)
-        >>> print(stats['PrecursorIntensity_Q2'])  # median
-    """
-    specs = _filter_by_mslevel(exp, ms_level)
-    preI, _, _ = precursor_intensities(specs)
-    preI = preI[~np.isnan(preI)]
-    if preI.size == 0:
-        return {
-            "PrecursorIntensity_Q1": np.nan,
-            "PrecursorIntensity_Q2": np.nan,
-            "PrecursorIntensity_Q3": np.nan,
-            "PrecursorIntensity_Mean": np.nan,
-            "PrecursorIntensity_Sd": np.nan,
-        }
-    q1, q2, q3 = np.quantile(preI, [0.25, 0.50, 0.75])
-    return {
-        "PrecursorIntensity_Q1": float(q1),
-        "PrecursorIntensity_Q2": float(q2),
-        "PrecursorIntensity_Q3": float(q3),
-        "PrecursorIntensity_Mean": float(np.mean(preI)),
-        "PrecursorIntensity_Sd": float(np.std(preI, ddof=1)) if preI.size > 1 else np.nan,
-    }
-
-def median_precursor_mz(exp: oms.MSExperiment, ms_level: int = 2,
-                        accepted_native_ids: Optional[set] = None) -> float:
-    """
-    ID-free proxy for the median precursor m/z of identified data points (MS:4000152).
-
-    MS:4000152:
-    "Median m/z value for MS2 precursors of all quantification data points after
-    user-defined acceptance criteria are applied. These data points may be for
-    example XIC profiles, isotopic pattern areas, or reporter ions." [PSI:MS]
-
-    The metric is calculated as follows:
-    (1) The spectra are filtered according to the MS level,
-    (2) The precursor m/z values are obtained,
-    (3) The median value is returned (NAs are removed).
-
-    Details:
-        MS:4000152
-        is_a: MS:4000003 ! single value
-        is_a: MS:4000008 ! ID based
-        relationship: has_metric_category MS:4000022 ! MS2 metric
-        relationship: has_units MS:1000040 ! m/z
-
-    Note:
-        MS:4000152 is an ID-based term ("all quantification data points after
-        user-defined acceptance criteria are applied"). Without identifications
-        rawQC computes the median precursor m/z over ALL MS2 precursors, which is
-        an ID-free proxy and is emitted WITHOUT the MS:4000152 accession. Pass
-        ``accepted_native_ids`` (accepted spectrum native IDs) to restrict the
-        computation to identified spectra and reproduce the ID-based definition.
-
-    Args:
-        exp: MSExperiment object
-        ms_level: int, MS level to analyze (default: 2)
-        accepted_native_ids: optional set of accepted spectrum native IDs
-
-    Returns:
-        float: Median precursor m/z
-
-    Example:
-        >>> median_mz = median_precursor_mz(exp, ms_level=2)
-    """
-    specs = _filter_by_mslevel(exp, ms_level)
-    if accepted_native_ids is not None:
-        wanted = set(accepted_native_ids)
-        specs = [s for s in specs if s.getNativeID() in wanted]
-    preMz, _, _ = _precursor_values(specs)
-    return _nanmedian(preMz)
 
 def rt_iqr(exp: oms.MSExperiment, ms_level: int = 1,
            accepted_native_ids: Optional[set] = None) -> float:
@@ -1722,63 +1487,6 @@ def area_under_tic_rt_quantiles(exp: oms.MSExperiment, ms_level: int = 1) -> Lis
     bounds = np.interp(qs, rts, cumint)                # cumulative area at each quartile RT
     return [float(bounds[i + 1] - bounds[i]) for i in range(4)]
 
-def extent_identified_precursor_intensity(exp: oms.MSExperiment, ms_level: int = 2,
-                                          accepted_native_ids: Optional[set] = None) -> float:
-    """
-    ID-free proxy for the extent of identified MS2 precursor intensity (MS:4000157).
-
-    MS:4000157:
-    "Ratio of 95th over 5th percentile of MS2 precursor intensity for all
-    quantification data points after user-defined acceptance criteria are
-    applied. Can be used to approximate the dynamic range of signal." [PSI:MS]
-
-    The metric is calculated as follows:
-    (1) The spectra are filtered according to the MS level,
-    (2) The intensities of the precursor ions are obtained,
-    (3) The 5% and 95% quantile of these intensities are obtained
-        (NA values are removed),
-    (4) The ratio between the 95% and the 5% intensity quantile is calculated
-        and returned.
-
-    Details:
-        MS:4000157
-        synonym: "MS1-3A" RELATED [PMID:19837981]
-        is_a: MS:4000001 ! QC metric
-        is_a: MS:4000003 ! single value
-        is_a: MS:4000008 ! ID based
-        relationship: has_metric_category MS:4000022 ! MS2 metric
-
-    Note:
-        MS:4000157 is an ID-based term (MS1-3A) whose reference implementation
-        (SMAQC) is based on identified-peptide XIC peak-apex intensities. Without
-        identifications rawQC computes the 95/5 ratio over ALL MS2 precursor
-        intensities, which is an ID-free proxy and is emitted WITHOUT the
-        MS:4000157 accession. Pass ``accepted_native_ids`` to restrict to
-        identified spectra. Precursor intensity values that are NA are removed.
-
-    Args:
-        exp: MSExperiment object
-        ms_level: int, MS level to analyze (default: 2)
-        accepted_native_ids: optional set of accepted spectrum native IDs
-
-    Returns:
-        float: Ratio of 95th/5th percentile intensities
-
-    Example:
-        >>> extent = extent_identified_precursor_intensity(exp, ms_level=2)
-    """
-    specs = _filter_by_mslevel(exp, ms_level)
-    # Optional accepted-ID filter (#40) applied before the QuaMeter MS2-TIC
-    # fallback intensity extraction (#39).
-    if accepted_native_ids is not None:
-        wanted = set(accepted_native_ids)
-        specs = [s for s in specs if s.getNativeID() in wanted]
-    preI, _, _ = precursor_intensities(specs)
-    preI = preI[~np.isnan(preI)]
-    if preI.size == 0: return np.nan
-    q5, q95 = np.quantile(preI, [0.05, 0.95])
-    if q5 == 0: return np.nan
-    return float(q95 / q5)
 
 def median_tic_rt_iqr(exp: oms.MSExperiment, ms_level: int = 1,
                       accepted_native_ids: Optional[set] = None) -> float:
@@ -1982,127 +1690,6 @@ def tic_quantile_rt_fraction(exp: oms.MSExperiment, ms_level: int = 1) -> List[f
         (rtmax - t3) / duration,
     ]
 
-def charge_metrics(exp: oms.MSExperiment, ms_level: int = 2) -> Dict[str, float]:
-    """
-    Charge-related metrics for MS2 precursors.
-
-    Calculates:
-    - Min/Max charge states
-    - Ratio of 3+ over 2+ (MS:4000169/MS:4000170)
-    - Ratio of 4+ over 2+ (MS:4000171/MS:4000172)
-    - Mean MS2 precursor charge (MS:4000173/MS:4000174)
-    - Median MS2 precursor charge (MS:4000175/MS:4000176)
-    - MS2 precursor charge state fractions (MS:4000063)
-
-    MS:4000169/MS:4000170:
-    "The ratio of 3+ over 2+ MS2 precursor charge count of all/identified spectra.
-    Higher ratios of 3+/2+ MS2 precursor charge count may preferentially favor
-    longer e.g. peptides." [PSI:MS]
-
-    MS:4000171/MS:4000172:
-    "The ratio of 4+ over 2+ MS2 precursor charge count of all/identified spectra."
-
-    MS:4000173/MS:4000174:
-    "Mean MS2 precursor charge in all/identified spectra" [PSI:MS]
-
-    MS:4000175/MS:4000176:
-    "Median MS2 precursor charge in all/identified spectra" [PSI:MS]
-
-    The metric is calculated as follows:
-    (1) The spectra are filtered according to the MS level,
-    (2) The precursor charge is obtained,
-    (3) Charge ratios, mean, and median are calculated.
-
-    Details:
-        MS:4000169/MS:4000171
-        synonym: "IS-3B"/"IS-3C" RELATED [PMID:19837981]
-        is_a: MS:4000003 ! single value
-        is_a: MS:4000009 ! ID free metric
-        relationship: has_metric_category MS:4000020 ! ion source metric
-        relationship: has_metric_category MS:4000022 ! MS2 metric
-
-    Note:
-        Returns NaN if either charge state is missing (matching R implementation).
-        For 3over2: NaN if either charge 2 or 3 is absent.
-        For 4over2: NaN if either charge 2 or 4 is absent.
-
-    Args:
-        exp: MSExperiment object
-        ms_level: int, MS level to analyze (default: 2)
-
-    Returns:
-        dict: Charge metrics (ChargeRatio_3over2, ChargeRatio_4over2, ChargeMean, ChargeMedian)
-
-    Example:
-        >>> metrics = charge_metrics(exp, ms_level=2)
-        >>> print(metrics['ChargeMean'])
-    """
-    specs = _filter_by_mslevel(exp, ms_level)
-    n_ms2 = len(specs)
-    _, _, charges = _precursor_values(specs)
-    # Known charge states (>=1); unknown = missing, zero, or non-physical
-    # negative charge, kept as its own bin. QuaMeter stores unknown charge as 0
-    # and divides every bin by ALL MS2 scans, so the fractions have the reference
-    # denominator and sum to 1.0.
-    c = charges[~np.isnan(charges)].astype(int)
-    out: Dict[str, Any] = {}
-
-    # Charge-state fraction table (MS:4000063), denominator = all MS2 scans.
-    labels = ["1", "2", "3", "4", "5", ">=6", "unknown"]
-    if n_ms2 > 0:
-        counts_by_bin = [
-            int(np.sum(c == 1)),
-            int(np.sum(c == 2)),
-            int(np.sum(c == 3)),
-            int(np.sum(c == 4)),
-            int(np.sum(c == 5)),
-            int(np.sum(c >= 6)),
-            # Unknown = every MS2 scan without a valid (>=1) charge: missing,
-            # zero, AND any non-physical negative charge. Basing this on the
-            # count of valid charges (not c.size) keeps the fractions summing to
-            # 1.0 even if a negative charge sneaks through.
-            int(n_ms2 - int(np.sum(c >= 1))),
-        ]
-        fractions = [float(n / n_ms2) for n in counts_by_bin]
-    else:
-        counts_by_bin = [0, 0, 0, 0, 0, 0, 0]
-        fractions = [np.nan] * 7
-    out["MS2_PrecursorCharge_Fractions"] = {
-        "charge_state": list(labels),
-        "count": counts_by_bin,
-        "fraction": fractions,
-    }
-
-    if c.size == 0:
-        out["ChargeMin"] = np.nan
-        out["ChargeMax"] = np.nan
-        out["ChargeRatio_3over2"] = np.nan
-        out["ChargeRatio_4over2"] = np.nan
-        out["ChargeMean"] = np.nan
-        out["ChargeMedian"] = np.nan
-        return out
-
-    # Min and Max charge states (over known charges)
-    out["ChargeMin"] = int(np.min(c))
-    out["ChargeMax"] = int(np.max(c))
-
-    vals, counts = np.unique(c, return_counts=True)
-    table = dict(zip(vals.tolist(), counts.tolist()))
-    # Match R implementation: return NaN if either charge state is missing
-    # R: if (all(c(2, 3) %in% names(chargeTable)))
-    if 2 in table and 3 in table:
-        out["ChargeRatio_3over2"] = float(table[3] / table[2])
-    else:
-        out["ChargeRatio_3over2"] = np.nan
-
-    if 2 in table and 4 in table:
-        out["ChargeRatio_4over2"] = float(table[4] / table[2])
-    else:
-        out["ChargeRatio_4over2"] = np.nan
-
-    out["ChargeMean"] = float(np.mean(c))
-    out["ChargeMedian"] = float(np.median(c))
-    return out
 
 # -------------------------------------------------------------------------
 # Additional metrics
@@ -2527,8 +2114,13 @@ def chromatogram_statistics(exp: oms.MSExperiment) -> Dict[str, Any]:
 # -------------------------------------------------------------------------
 # Compute metrics (your originals + MsQuality ports)
 # -------------------------------------------------------------------------
-def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
-    """Compute QC metrics and return them in a stable, presentation-ready order."""
+def compute_qc_metrics(exp: oms.MSExperiment, acquisition_mode: str = "auto") -> Dict[str, Any]:
+    """Compute shared QC plus DDA precursor or DIA window metrics.
+
+    Auto mode recognizes explicit DIA annotations and Bruker DIA native IDs;
+    use ``acquisition_mode="dia"`` for DIA inputs without those annotations.
+    """
+    mode = resolve_acquisition_mode(exp, acquisition_mode)
     ms1_specs = _filter_by_mslevel(exp, 1)
     ms2_specs = _filter_by_mslevel(exp, 2)
 
@@ -2544,7 +2136,6 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     density_ms1 = peak_density_quantiles(exp, 1)
     density_ms2 = peak_density_quantiles(exp, 2)
     chrom_stats = chromatogram_statistics(exp)
-    charge_info = charge_metrics(exp, 2)
     pol_stats = polarity_statistics(exp)
     rt_quantiles_ms1 = rt_over_ms_quantiles(exp, 1)
     rt_quantiles_ms2 = rt_over_ms_quantiles(exp, 2)
@@ -2584,10 +2175,6 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["EmptyScans_MS1"] = number_empty_scans(exp, 1)
     computed["EmptyScans_MS2"] = number_empty_scans(exp, 2)
 
-    # Precursor m/z range (MS:4000069) is defined for MSn only; MS1 spectra have
-    # no precursor, so no MS1 precursor range is emitted. Each range is one
-    # two-value [min, max] n-tuple.
-    computed["MzRange_MS2"] = [float(x) for x in mz_acquisition_range(exp, 2)]
     computed["RtRange_MS1"] = [float(x) for x in rt_acquisition_range(exp, 1)]
     computed["RtRange_MS2"] = [float(x) for x in rt_acquisition_range(exp, 2)]
 
@@ -2598,7 +2185,8 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     computed["RT_MS1_IQRRate"] = rt_iqr_rate(exp, 1)
 
     computed["TIC_MS1_Area"] = area_under_tic(exp, 1)
-    computed["TIC_MS2_Area"] = area_under_tic(exp, 2)
+    if mode == "dda":
+        computed["TIC_MS2_Area"] = area_under_tic(exp, 2)
     # All four RT-quartile areas are emitted as one MS:4000156 n-tuple (the old
     # code exposed only Q1-Q3 as separate scalars and discarded Q4).
     computed["TIC_MS1_Area_RTQuantiles"] = [float(x) for x in qareas]
@@ -2651,19 +2239,10 @@ def compute_qc_metrics(exp: oms.MSExperiment) -> Dict[str, Any]:
     # include MS3+ base peaks, not just the MS1/MS2 subsets collected above.
     computed["BasePeak_All_Max"] = max_base_peak_intensity(exp)
 
-    computed["PrecursorMz_MS2_Median"] = median_precursor_mz(exp, 2)
-    computed["ExtentPrecursorIntensity_95over5_MS2"] = extent_identified_precursor_intensity(exp, 2)
-    computed.update(precursor_intensity_stats(exp, 2))
-    _, _n_prec_fallback, _ = precursor_intensities(ms2_specs)
-    computed["PrecursorIntensity_FallbackCount"] = int(_n_prec_fallback)
-
-    computed["ChargeMin"] = charge_info.get("ChargeMin", np.nan)
-    computed["ChargeMax"] = charge_info.get("ChargeMax", np.nan)
-    computed["ChargeRatio_3over2"] = charge_info.get("ChargeRatio_3over2", np.nan)
-    computed["ChargeRatio_4over2"] = charge_info.get("ChargeRatio_4over2", np.nan)
-    computed["ChargeMean"] = charge_info.get("ChargeMean", np.nan)
-    computed["ChargeMedian"] = charge_info.get("ChargeMedian", np.nan)
-    computed["MS2_PrecursorCharge_Fractions"] = charge_info.get("MS2_PrecursorCharge_Fractions")
+    if mode == "dia":
+        computed.update(compute_dia_metrics(exp))
+    else:
+        computed.update(compute_dda_metrics(exp))
 
     # Acquisition/instrument facts as single valid custom metrics (tables) with
     # no fixed key slots, rather than dynamic per-method/per-analyzer keys.
@@ -2803,8 +2382,8 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
     run_qualities = []
 
     for idx, run_info in enumerate(run_data, 1):
-        mzml_file = run_info['filename']
-        input_name = os.path.splitext(os.path.basename(mzml_file))[0]
+        mzml_file = os.fspath(run_info['filename'])
+        input_name = Path(mzml_file).stem
         metrics_dict = run_info['metrics']
         instrument_metadata = run_info['instrument_metadata']
 
@@ -2818,9 +2397,10 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
             file_properties.append(qc.CvParameter(
                 accession=acc, name=cv_name, value=_jsonify_value(v)))
 
+        format_accession, format_name = input_format(mzml_file)
         infi = qc.InputFile(name=input_name,
                             location=mzml_file,
-                            fileFormat=qc.CvParameter(accession="MS:1000584", name="mzML format"),
+                            fileFormat=qc.CvParameter(accession=format_accession, name=format_name),
                             fileProperties=file_properties)
 
         meta = qc.MetaDataParameters(
@@ -3152,15 +2732,16 @@ def calculate_metrics(
     show_tables: bool = False,
     show_json: bool = False,
     cmap_name: str = "RdBu_r",
-    continue_on_error: bool = False
+    continue_on_error: bool = False,
+    acquisition_mode: str = "auto",
 ) -> bool:
     """
-    Calculate QC metrics for one or more mzML files and generate mzQC output.
+    Calculate QC metrics for mzML, Bruker TDF .d, or supported Thermo .raw inputs.
     
     This is the core function that can be imported and used programmatically.
     
     Args:
-        mzml_files: List of paths to mzML files to process
+        mzml_files: Paths to mzML, Bruker TDF .d, or supported Thermo .raw inputs (legacy argument name)
         output_file: Path to save the mzQC JSON output (default: "multi_run_qc.mzQC").
                      Set to None to skip saving to file.
         generate_plot: Whether to generate a heatmap visualization (default: True)
@@ -3169,12 +2750,13 @@ def calculate_metrics(
         show_json: Whether to print the full JSON output (default: False)
         cmap_name: Colormap name for heatmap (default: "RdBu_r")
         continue_on_error: Continue processing other files if one fails (default: False)
+        acquisition_mode: auto, dda, or dia; use dia for unannotated DIA files
     
     Returns:
         bool: True if any errors occurred during processing, False otherwise
         
     Example:
-        >>> from pyopenms_idfreeqc.calculate_metrics import calculate_metrics
+        >>> from rawQC.calculate_metrics import calculate_metrics
         >>> error_occurred = calculate_metrics(
         ...     mzml_files=["sample1.mzML", "sample2.mzML"],
         ...     output_file="my_qc.json"
@@ -3185,7 +2767,7 @@ def calculate_metrics(
     import matplotlib.pyplot as plt
     import matplotlib as mpl
     
-    print("Processing mzML files and computing QC metrics...")
+    print("Processing mass spectrometry inputs and computing QC metrics...")
     all_run_data = []
     error_occurred = False
 
@@ -3193,15 +2775,15 @@ def calculate_metrics(
         print(f"\nProcessing {filename}...")
         
         try:
-            # Load mzML
-            fh = oms.MzMLFile()
-            exp = oms.MSExperiment()
-            fh.load(filename, exp)
-            exp.updateRanges()
-
-            # Compute metrics
-            metrics = compute_qc_metrics(exp)
+            exp = load_experiment(filename)
+            mode = resolve_acquisition_mode(exp, acquisition_mode)
+            print(f"  Acquisition metrics: {mode.upper()} ({acquisition_mode})")
+            if acquisition_mode == "auto" and mode == "dda":
+                print("  No explicit DIA annotation found; use --acquisition-mode dia for unannotated DIA data.")
+            metrics = compute_qc_metrics(exp, mode)
             instrument_meta = extract_instrument_metadata(exp)
+            instrument_meta["rawQC acquisition mode"] = mode
+            instrument_meta["rawQC acquisition mode selection"] = acquisition_mode
 
             # Store run data
             all_run_data.append({
@@ -3232,7 +2814,7 @@ def calculate_metrics(
             else:
                 raise RuntimeError("No files were successfully processed")
         else:
-            raise ValueError("No mzML files provided for processing")
+            raise ValueError("No input files provided for processing")
     
     # Build mzQC JSON with all runs
     print(f"\nBuilding mzQC JSON file from {len(all_run_data)} successfully processed files...")
@@ -3391,33 +2973,33 @@ def calculate_metrics(
 # Click CLI wrapper
 # -------------------------------------------------------------------------
 @click.command(help=textwrap.dedent("""
-Calculate ID-free QC metrics for mzML mass spectrometry files.
+Calculate ID-free QC metrics for mzML, Bruker TDF .d, and supported Thermo .raw inputs.
 
-This tool computes comprehensive quality control metrics from mzML files
+This tool computes shared and acquisition-specific quality control metrics
 and outputs results in mzQC format with optional visualizations.
 
-FILES: One or more mzML files to process. Supports wildcards (e.g., *.mzML)
+FILES: mzML files, Bruker TDF .d directories, or Thermo .raw files (if supported).
 
 \b
 Examples:
   
   # Process specific files (supports wildcards)
   
-  python calculate_metrics.py sample1.mzML sample2.mzML
-  python calculate_metrics.py data/*.mzML
+  python -m rawQC sample1.mzML sample2.mzML
+  python -m rawQC data/*.mzML
 
   # Use demo files (downloads if needed)
 
-  python calculate_metrics.py --demo --download-demo
+  python -m rawQC --demo --download-demo
 
   # Custom output paths
 
-  python calculate_metrics.py --demo -o my_qc.json -p my_plot.png
+  python -m rawQC --demo -o my_qc.json -p my_plot.png
 
   # Library usage in Python code:
 
-  from pyopenms_idfreeqc.calculate_metrics import calculate_metrics
-  json_output = calculate_metrics(["sample1.mzML", "sample2.mzML"])
+  from rawQC.calculate_metrics import calculate_metrics
+  error_occurred = calculate_metrics(["sample1.mzML", "sample2.mzML"])
 """))
 @click.argument(
     'files',
@@ -3475,7 +3057,14 @@ Examples:
     is_flag=True,
     help='Continue processing files even if an error occurs (still exits with error code)'
 )
-def main(files, demo, output, plot, no_plot, show_tables, show_json, download_demo, cmap, continue_on_error):
+@click.option(
+    '--acquisition-mode',
+    type=click.Choice(['auto', 'dda', 'dia']),
+    default='auto',
+    show_default=True,
+    help='Auto uses explicit DIA annotations/Bruker DIA IDs; otherwise DDA. Select dia for unannotated DIA files.'
+)
+def main(files, demo, output, plot, no_plot, show_tables, show_json, download_demo, cmap, continue_on_error, acquisition_mode):
     mzml_files = []
     
     if demo:
@@ -3502,11 +3091,11 @@ def main(files, demo, output, plot, no_plot, show_tables, show_json, download_de
     else:
         # Use user-provided files
         if not files:
-            click.echo("Error: No files specified. Provide mzML file paths as arguments or use --demo for demo mode.", err=True)
+            click.echo("Error: No files specified. Provide mzML/.raw file paths or Bruker TDF .d directories as arguments or use --demo for demo mode.", err=True)
             click.echo("\nExamples:", err=True)
-            click.echo("  python calculate_metrics.py file1.mzML file2.mzML", err=True)
-            click.echo("  python calculate_metrics.py data/*.mzML", err=True)
-            click.echo("  python calculate_metrics.py --demo --download-demo", err=True)
+            click.echo("  python -m rawQC file1.mzML file2.mzML", err=True)
+            click.echo("  python -m rawQC data/*.mzML", err=True)
+            click.echo("  python -m rawQC --demo --download-demo", err=True)
             raise click.Abort()
         mzml_files = list(files)
     
@@ -3526,7 +3115,8 @@ def main(files, demo, output, plot, no_plot, show_tables, show_json, download_de
             show_tables=show_tables,
             show_json=show_json,
             cmap_name=cmap,
-            continue_on_error=continue_on_error
+            continue_on_error=continue_on_error,
+            acquisition_mode=acquisition_mode,
         )
         
         # Exit with error code if any errors occurred during processing

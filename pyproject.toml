@@ -7,14 +7,24 @@ name = "rawQC"
 version = "0.1.1"
 description = "ID-free QC metrics demo refactored into a reusable package"
 readme = "README.MD"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dependencies = [
     "click",
     "pymzqc>=1.0.1",
-    "pyopenms>=3.5.0",
+    "pyopenms==3.6.0.dev20260905",
     "seaborn>=0.13.2",
 ]
 
 [project.scripts]
 rawQC = "rawQC.calculate_metrics:main"
 
+[tool.uv.sources]
+pyopenms = { index = "openms-nightly" }
+
+[[tool.uv.index]]
+name = "openms-nightly"
+url = "https://pypi.openms.de/simple/"
+explicit = true
+
+[dependency-groups]
+dev = ["pytest", "jsonschema"]
