@@ -64,6 +64,45 @@ _DESCRIPTIONS = {
         "by isolation width or interpreted as precursor intensity. Missing "
         "mobility or TIC values are null."
     ),
+    "DIA_IsolationWindow_RevisitSummary": (
+        "Column-oriented table indexed by zero-based window_index in the isolation "
+        "window summary. Adjacent observations of each window are compared in "
+        "acquisition order without bridging nonfinite RTs. Positive finite intervals "
+        "have count, median, minimum, maximum and population CV in seconds; equal-RT "
+        "and decreasing-RT transitions are counted separately, so simultaneous "
+        "diaPASEF windows do not create zero-duration cycles. Nonfinite RT count "
+        "counts observations; invalid_interval_count counts transitions with an "
+        "invalid endpoint or overflowing difference. long_interval_count counts "
+        "positive intervals strictly above 1.5 times their median, only when at "
+        "least three positive intervals exist. It flags potential sampling "
+        "interruptions, not proven missing acquisitions or missing frames."
+    ),
+    "DIA_IsolationWindow_MzCoverage": (
+        "Column-oriented table of run-wide observed m/z interval projections, "
+        "grouped by mobility mode and reported OpenMS drift-time unit; each FAIMS "
+        "voltage is separate. Identical projected intervals are deduplicated. "
+        "covered_width_mz is their union, gap_width_mz is uncovered width inside "
+        "the observed envelope, gap_count counts internal gaps, and overlap_width_mz "
+        "is width covered by at least two distinct projected intervals (not excess "
+        "multiplicity). coverage_fraction is union divided by envelope width. "
+        "Projections across IM selections are not two-dimensional coverage and "
+        "run-wide coverage does not imply a complete acquisition cycle."
+    ),
+    "DIA_IsolationWindow_MzIMCoverage": (
+        "Column-oriented table of run-wide observed m/z–ion-mobility rectangle "
+        "coverage for windows with a known common unit (milliseconds, inverse "
+        "reduced mobility, or CCS). FAIMS and unknown units have no 2D rows. "
+        "Reader-provided mobility lower/upper bounds take precedence; otherwise "
+        "valid precursor drift-time offsets define bounds. Windows without "
+        "valid nonnegative bounds are counted as excluded; exact rectangles "
+        "are deduplicated. Areas have units m/z times the reported mobility unit. "
+        "covered_area is the rectangle union, uncovered_area is the portion of "
+        "the observed bounding rectangle outside that union, and overlap_area "
+        "is area covered by at least two distinct rectangles. These geometric "
+        "gaps can be intentional and are not claims of missing acquisitions; "
+        "no intended method envelope or per-cycle completeness is inferred. "
+        "Area and envelope values are null when no valid rectangles exist."
+    ),
     "DIA_MS1BoundedCycle_Count": (
         "Number of acquisition-order intervals between consecutive MS1 spectra "
         "with increasing finite RT and at least one MS2 spectrum; every MS2 RT "
@@ -129,13 +168,17 @@ def _finite_float(value):
     return value if math.isfinite(value) else None
 
 
+def _enum_value(value):
+    return int(getattr(value, "value", value))
+
+
 def _mobility_key(spectrum, precursor):
     """Keep native diaPASEF mobility ranges and FAIMS voltages distinct."""
     drift_time = _finite_float(spectrum.getDriftTime())
     unit = spectrum.getDriftTimeUnit()
     # Cython exposes an integer; direct bindings may expose an enum.
-    unit = int(getattr(unit, "value", unit))
-    faims_unit = int(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
+    unit = _enum_value(unit)
+    faims_unit = _enum_value(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE)
     if unit != faims_unit and drift_time == -1.0:  # OpenMS missing sentinel
         drift_time = None
     lower = upper = None
@@ -176,6 +219,179 @@ def _isolation_window(spectrum):
     if not math.isfinite(upper) or upper <= lower:
         return None, "Invalid"
     return (lower, upper) + _mobility_key(spectrum, precursor), None
+
+
+def _window_sort_key(window):
+    return tuple((value is not None, value if value is not None else 0)
+                 for value in window)
+
+
+def _revisit_summary(sorted_windows):
+    columns = ("window_index", "observation_count", "nonfinite_rt_count",
+               "positive_interval_count", "equal_rt_interval_count",
+               "decreasing_rt_interval_count", "invalid_interval_count",
+               "interval_min_seconds", "interval_median_seconds",
+               "interval_max_seconds", "interval_cv", "long_interval_count")
+    table = {column: [] for column in columns}
+    for index, (_, record) in enumerate(sorted_windows):
+        rts = record["rts"]
+        intervals = []
+        equal = decreasing = invalid = 0
+        for previous, current in zip(rts, rts[1:]):
+            interval = (_finite_float(current - previous)
+                        if current is not None and previous is not None else None)
+            if interval is None:
+                invalid += 1
+            elif interval == 0:
+                equal += 1
+            elif interval < 0:
+                decreasing += 1
+            else:
+                intervals.append(interval)
+        midpoint = median(intervals) if intervals else None
+        values = (index, len(rts), sum(rt is None for rt in rts), len(intervals),
+                  equal, decreasing, invalid, min(intervals) if intervals else None,
+                  midpoint, max(intervals) if intervals else None,
+                  pstdev(intervals) / mean(intervals) if len(intervals) > 1 else None,
+                  sum(interval / midpoint > 1.5 for interval in intervals)
+                  if len(intervals) >= 3 else None)
+        for column, value in zip(columns, values):
+            table[column].append(value)
+    return table
+
+
+def _coverage_group(window):
+    """Keep unannotated, unknown-unit, IM and individual FAIMS selections apart."""
+    _, _, drift, unit, im_lower, im_upper, prec_drift, _, _ = window
+    if unit == _enum_value(oms.DriftTimeUnit.FAIMS_COMPENSATION_VOLTAGE):
+        return "faims", unit, drift
+    known = {_enum_value(oms.DriftTimeUnit.MILLISECOND),
+             _enum_value(oms.DriftTimeUnit.VSSC), _enum_value(oms.DriftTimeUnit.CCS)}
+    if unit in known:
+        return "ion_mobility", unit, None
+    if unit is not None or any(value is not None for value in
+                               (drift, im_lower, im_upper, prec_drift)):
+        return "unknown_mobility", unit, None
+    return "none", None, None
+
+
+def _mobility_bounds(window, reader_bounds_present=False):
+    """Use explicit reader bounds or, when absent, precursor selection offsets."""
+    _, _, _, _, lower, upper, drift, lower_offset, upper_offset = window
+    if lower is None and upper is None:
+        if (reader_bounds_present or drift is None or lower_offset is None or upper_offset is None
+                or lower_offset < 0 or upper_offset < 0):
+            return None
+        lower = _finite_float(drift - lower_offset)
+        upper = _finite_float(drift + upper_offset)
+    if lower is None or upper is None or lower < 0 or upper <= lower:
+        return None
+    return lower, upper
+
+
+def _interval_measure(intervals):
+    """Return union width, width with multiplicity >=2, and union components."""
+    events = {}
+    for lower, upper in intervals:
+        events[lower] = events.get(lower, 0) + 1
+        events[upper] = events.get(upper, 0) - 1
+    covered = overlap = 0.0
+    components = active = 0
+    previous = None
+    for position, delta in sorted(events.items()):
+        if previous is not None:
+            width = position - previous
+            if active:
+                covered += width
+            if active >= 2:
+                overlap += width
+        if active == 0 and active + delta > 0:
+            components += 1
+        active += delta
+        previous = position
+    return covered, overlap, components
+
+
+def _rectangle_measure(rectangles):
+    """Integrate an IM interval union through m/z slabs without double counting."""
+    events = {}
+    for mz_lower, mz_upper, im_lower, im_upper in rectangles:
+        events.setdefault(mz_lower, []).append((im_lower, im_upper, 1))
+        events.setdefault(mz_upper, []).append((im_lower, im_upper, -1))
+    active = {}
+    previous = None
+    covered = overlap = 0.0
+    for position, changes in sorted(events.items()):
+        if previous is not None and active:
+            im_covered, im_overlap, _ = _interval_measure(
+                interval for interval, count in active.items() for _ in range(count))
+            covered += (position - previous) * im_covered
+            overlap += (position - previous) * im_overlap
+        for lower, upper, delta in changes:
+            interval = lower, upper
+            active[interval] = active.get(interval, 0) + delta
+            if not active[interval]:
+                del active[interval]
+        previous = position
+    return covered, overlap
+
+
+def _coverage_summary(sorted_windows):
+    mz_columns = ("mobility_mode", "drift_time_unit", "faims_cv", "window_count",
+                  "distinct_mz_interval_count", "mz_lower", "mz_upper",
+                  "envelope_width_mz", "covered_width_mz", "gap_width_mz",
+                  "overlap_width_mz", "coverage_fraction", "gap_count")
+    im_columns = ("mobility_mode", "drift_time_unit", "faims_cv", "window_count",
+                  "rectangle_count", "excluded_window_count", "mz_lower", "mz_upper",
+                  "ion_mobility_lower", "ion_mobility_upper", "envelope_area",
+                  "covered_area", "uncovered_area", "overlap_area", "coverage_fraction")
+    mz_table = {column: [] for column in mz_columns}
+    im_table = {column: [] for column in im_columns}
+    groups = {}
+    for window, record in sorted_windows:
+        groups.setdefault(_coverage_group(window), []).append((window, record))
+    for group, records in sorted(groups.items(), key=lambda item: (
+            item[0][0], _window_sort_key(item[0][1:]))):
+        windows = [window for window, _ in records]
+        intervals = {(window[0], window[1]) for window in windows}
+        mz_lower = min(interval[0] for interval in intervals)
+        mz_upper = max(interval[1] for interval in intervals)
+        envelope = mz_upper - mz_lower
+        covered, overlap, components = _interval_measure(intervals)
+        values = group + (len(windows), len(intervals), mz_lower, mz_upper, envelope,
+                          _finite_float(covered), _finite_float(max(0, envelope - covered)),
+                          _finite_float(overlap), _finite_float(covered / envelope),
+                          max(0, components - 1))
+        for column, value in zip(mz_columns, values):
+            mz_table[column].append(value)
+        if group[0] != "ion_mobility":
+            continue
+        rectangles = set()
+        excluded = 0
+        for window, record in records:
+            bounds = _mobility_bounds(window, record["reader_mobility_bounds_present"])
+            if bounds is None:
+                excluded += 1
+            else:
+                rectangles.add(window[:2] + bounds)
+        if rectangles:
+            mz_lower = min(rectangle[0] for rectangle in rectangles)
+            mz_upper = max(rectangle[1] for rectangle in rectangles)
+            im_lower = min(rectangle[2] for rectangle in rectangles)
+            im_upper = max(rectangle[3] for rectangle in rectangles)
+            envelope = _finite_float((mz_upper - mz_lower) * (im_upper - im_lower))
+            covered, overlap = _rectangle_measure(rectangles)
+            geometry = (mz_lower, mz_upper, im_lower, im_upper, envelope,
+                        _finite_float(covered),
+                        _finite_float(max(0, envelope - covered)) if envelope is not None else None,
+                        _finite_float(overlap),
+                        _finite_float(covered / envelope) if envelope is not None and envelope > 0 else None)
+        else:
+            geometry = (None,) * 9
+        values = group + (len(windows), len(rectangles), excluded) + geometry
+        for column, value in zip(im_columns, values):
+            im_table[column].append(value)
+    return mz_table, im_table
 
 
 def compute_dia_metrics(exp):
@@ -225,8 +441,13 @@ def compute_dia_metrics(exp):
                 continue
             cycle_windows.add(window)
             record = windows.setdefault(window, {"count": 0, "empty": 0,
-                                                  "invalid": 0, "tics": []})
+                                                  "invalid": 0, "tics": [], "rts": [],
+                                                  "reader_mobility_bounds_present": False})
             record["count"] += 1
+            record["rts"].append(rt)
+            record["reader_mobility_bounds_present"] |= (
+                spectrum.metaValueExists("ion mobility lower limit")
+                or spectrum.metaValueExists("ion mobility upper limit"))
             if tic is None:
                 record["invalid"] += 1
                 continue
@@ -248,8 +469,8 @@ def compute_dia_metrics(exp):
                "empty_scan_count", "invalid_tic_scan_count", "tic_sum", "tic_median")
     table = {key: [] for key in columns}
     # Numeric sorting with None first is stable even for mixed mobility metadata.
-    for window, record in sorted(windows.items(), key=lambda item: tuple(
-            (value is not None, value if value is not None else 0) for value in item[0])):
+    sorted_windows = sorted(windows.items(), key=lambda item: _window_sort_key(item[0]))
+    for window, record in sorted_windows:
         lower, upper, drift, unit, im_lower, im_upper, prec_drift, prec_lower, prec_upper = window
         tics = record["tics"]
         values = (lower, upper, round(upper - lower, 6), drift, unit, im_lower, im_upper,
@@ -259,6 +480,9 @@ def compute_dia_metrics(exp):
         for key, value in zip(columns, values):
             table[key].append(value)
     metrics["DIA_IsolationWindow_Summary"] = table
+    metrics["DIA_IsolationWindow_RevisitSummary"] = _revisit_summary(sorted_windows)
+    (metrics["DIA_IsolationWindow_MzCoverage"],
+     metrics["DIA_IsolationWindow_MzIMCoverage"]) = _coverage_summary(sorted_windows)
     if windows:
         metrics["DIA_IsolationWindow_MzRange"] = [min(table["lower_mz"]), max(table["upper_mz"])]
         metrics["DIA_IsolationWindow_WidthRange"] = [min(table["width_mz"]), max(table["width_mz"])]

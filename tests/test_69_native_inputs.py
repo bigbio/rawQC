@@ -47,6 +47,7 @@ def test_dia_report_omits_single_precursor_statistics():
     assert metrics["DIA_IsolationWindow_MzRange"] == [400.0, 500.0]
     assert metrics["NumberOfSpectra_MS2"] == 6
     assert "PrecursorIntensity_FallbackCount" not in metrics
+
     assert "ChargeMean" not in metrics
     assert "MzRange_MS2" not in metrics
     problems = validate_metric_registry(metrics)
@@ -181,6 +182,22 @@ def test_native_bruker_tdf_cli(tmp_path):
     assert metrics["DIA_IsolationWindow_WidthRange"] == [50.0, 50.0]
     assert all(v is not None for v in metrics["DIA_IsolationWindow_Summary"]["ion_mobility_lower"])
     assert "PrecursorIntensity_FallbackCount" not in metrics
+
+    scan_table = metrics["Acquisition_ScanMetadata"]
+    frame_table = metrics["Acquisition_BrukerFrameMetadata"]
+    frame_summary = metrics["Acquisition_BrukerFrameSummary"]
+    assert len(scan_table["spectrum_index"]) == 10
+    assert len(frame_table["Id"]) == 6
+    assert frame_table["accumulation_time_ms"] == [100.0] * 6
+    assert frame_table["ramp_time_ms"] == [100.0] * 6
+    assert scan_table["accumulation_time_ms"] == [100.0] * 10
+    assert sum(frame_table["rawqc_loaded_spectrum_count"]) == 10
+    assert frame_summary["reader_omitted_frame_count"] == [0]
+    assert metrics["DIA_IsolationWindow_MzIMCoverage"]["covered_area"][0] > 0
+    properties = {p["name"]: p.get("value") for p in run["metadata"]["inputFiles"][0]["fileProperties"]}
+    assert properties["Provenance_Sample"]["name"] == "test"
+    assert "Provenance_RecordedMetadata" in properties
+    assert not any(name.startswith("Provenance_") for name in metrics)
 
 
 def test_mzml_cli_and_continue_on_error(tmp_path):

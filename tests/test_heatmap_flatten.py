@@ -20,6 +20,13 @@ def test_none_and_string_and_bool_skipped():
     assert _flatten_metric_for_heatmap("A", True) == []
 
 
+def test_detailed_scan_records_do_not_expand_into_heatmap_rows():
+    table = {"native_id": ["scan=1", "scan=2"], "ion_injection_time_ms": [10, 20]}
+    assert _flatten_metric_for_heatmap("Acquisition_ScanMetadata", table) == []
+    assert _flatten_metric_for_heatmap("IonInjectionTime_RTSummary", table) == []
+    assert _flatten_metric_for_heatmap("IonInjectionTime_Summary", table)
+
+
 def test_ntuple_expanded():
     assert _flatten_metric_for_heatmap("RT", [0.25, 0.25, 0.25, 0.25]) == [
         ("RT[0]", 0.25), ("RT[1]", 0.25), ("RT[2]", 0.25), ("RT[3]", 0.25)]
@@ -46,3 +53,23 @@ def test_table_with_missing_numeric_skipped():
     assert rows.get("MA.resolution[ORBITRAP]") == 60000.0
     assert "MA.resolution[IT]" not in rows          # None dropped
     assert not any(".index[" in k for k in rows)    # positional index suppressed
+
+
+def test_filling_group_labels_remain_distinct_and_stable_across_runs():
+    table = {"ms_level": [2, 2], "faims_cv_volts": [-50, -50],
+             "isolation_metadata_status": ["recorded", "recorded"],
+             "isolation_lower_mz": [400, 500], "isolation_upper_mz": [425, 525],
+             "injection_time_median_ms": [10, 50]}
+    rows = _flatten_metric_for_heatmap("IonInjectionTime_Summary", table)
+    assert len(rows) == len(dict(rows)) == 2
+    assert sorted(value for _, value in rows) == [10, 50]
+    reversed_rows = _flatten_metric_for_heatmap("IonInjectionTime_Summary",
+                                               {key: values[::-1] for key, values in table.items()})
+    assert dict(rows) == dict(reversed_rows)
+
+
+def test_coverage_heatmap_labels_keep_faims_voltages_separate():
+    table = {"mobility_mode": ["faims", "faims"], "drift_time_unit": [3, 3],
+             "faims_cv": [-50, -70], "coverage_fraction": [0.5, 1.0]}
+    rows = _flatten_metric_for_heatmap("DIA_IsolationWindow_MzCoverage", table)
+    assert len(rows) == len(dict(rows)) == 2

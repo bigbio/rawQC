@@ -24,6 +24,8 @@ from .dda import (
 )
 from .spectrum_utils import _filter_by_mslevel, _nanmedian, _select_spectra
 from .dia import DIA_METRIC_METADATA, compute_dia_metrics
+from .acquisition import ACQUISITION_METRIC_METADATA, compute_acquisition_metrics
+from .provenance import PROVENANCE_METRIC_METADATA, compute_provenance_metrics
 from .input import input_format, load_experiment, resolve_acquisition_mode
 
 # -------------------------------------------------------------------------
@@ -483,6 +485,8 @@ DDA_METRIC_NAMES = {
     "ChargeMean", "ChargeMedian", "MS2_PrecursorCharge_Fractions",
 }
 METRIC_METADATA.update(DIA_METRIC_METADATA)
+METRIC_METADATA.update(ACQUISITION_METRIC_METADATA)
+METRIC_METADATA.update(PROVENANCE_METRIC_METADATA)
 
 # Derived metadata lookups for convenience and validation
 
@@ -2243,6 +2247,8 @@ def compute_qc_metrics(exp: oms.MSExperiment, acquisition_mode: str = "auto") ->
         computed.update(compute_dia_metrics(exp))
     else:
         computed.update(compute_dda_metrics(exp))
+    computed.update(compute_acquisition_metrics(exp, mode))
+    computed.update(compute_provenance_metrics(exp))
 
     # Acquisition/instrument facts as single valid custom metrics (tables) with
     # no fixed key slots, rather than dynamic per-method/per-analyzer keys.
@@ -2326,21 +2332,17 @@ def _local_accession(name: str) -> str:
 
 
 def _jsonify_value(v: Any) -> Any:
-    """Coerce a metric value to a JSON-serialisable form (scalar/array/table)."""
-    def _clean(x):
-        if x is None or (isinstance(x, float) and not np.isfinite(x)):
-            return None
-        return x
-
+    """Recursively preserve tables/provenance while replacing nonfinite values."""
+    if isinstance(v, np.generic):
+        v = v.item()
     if v is None or (isinstance(v, float) and not np.isfinite(v)):
         return None
     if isinstance(v, (int, float, str)):
         return v
-    if isinstance(v, (list, tuple)):
-        return [_clean(x) for x in v]
+    if isinstance(v, (list, tuple, np.ndarray)):
+        return [_jsonify_value(x) for x in v]
     if isinstance(v, dict):
-        return {k: ([_clean(x) for x in col] if isinstance(col, (list, tuple)) else _clean(col))
-                for k, col in v.items()}
+        return {str(k): _jsonify_value(value) for k, value in v.items()}
     return str(v)
 
 
@@ -2385,7 +2387,9 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
         mzml_file = os.fspath(run_info['filename'])
         input_name = Path(mzml_file).stem
         metrics_dict = run_info['metrics']
-        instrument_metadata = run_info['instrument_metadata']
+        instrument_metadata = dict(run_info['instrument_metadata'])
+        instrument_metadata.update({k: v for k, v in metrics_dict.items()
+                                    if k in PROVENANCE_METRIC_METADATA})
 
         # Instrument/input metadata belongs in the metadata structure, not in
         # qualityMetrics: attach it as fileProperties (CvParameters) of the input.
@@ -2395,7 +2399,8 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
                 continue
             acc, cv_name = _INSTRUMENT_CV_ACCESSIONS.get(k, (_local_accession(k), k))
             file_properties.append(qc.CvParameter(
-                accession=acc, name=cv_name, value=_jsonify_value(v)))
+                accession=acc, name=cv_name, value=_jsonify_value(v),
+                description=PROVENANCE_METRIC_METADATA.get(k, {}).get("description")))
 
         format_accession, format_name = input_format(mzml_file)
         infi = qc.InputFile(name=input_name,
@@ -2411,6 +2416,8 @@ def build_mzqc(run_data: List[Dict[str, Any]]) -> str:
 
         qmetrics = []
         for k, v in metrics_dict.items():
+            if k in PROVENANCE_METRIC_METADATA:
+                continue
             metric_meta = METRIC_METADATA.get(k, {})
             description = metric_meta.get("description") or "rawQC ID-free QC metric"
             # Every emitted metric must have a valid accession + name. Use the
@@ -2676,6 +2683,13 @@ def _flatten_metric_for_heatmap(name: str, value: Any) -> List[Tuple[str, float]
     tuple/table metrics (charge fractions, RT quantiles, ranges, activation/
     analyzer tables) are visualized instead of silently dropped.
     """
+    # Detailed records may have millions of cells and are not comparable run
+    # summaries. Keep them in mzQC/TSV, without creating a row per scan in plots.
+    if (name.startswith("Provenance_") or name in {
+            "Acquisition_ScanMetadata", "Acquisition_BrukerFrameMetadata",
+            "Acquisition_MetadataSources", "IonInjectionTime_RTSummary"}):
+        return []
+
     def _num(x: Any) -> Optional[float]:
         if isinstance(x, bool) or x is None:
             return None
@@ -2701,11 +2715,35 @@ def _flatten_metric_for_heatmap(name: str, value: Any) -> List[Tuple[str, float]
                 rows.append((f"{name}[{i}]", f))
     elif isinstance(value, dict):
         labels = None
+        identity_columns = {
+            "IonInjectionTime_Summary": (
+                ("ms_level", "MS"), ("faims_cv_volts", "CV"),
+                ("isolation_metadata_status", "isolation"),
+                ("isolation_lower_mz", "mzLo"), ("isolation_upper_mz", "mzHi"),
+                ("drift_time", "drift"), ("drift_time_unit", "unit"),
+                ("ion_mobility_lower", "imLo"), ("ion_mobility_upper", "imHi"),
+                ("precursor_drift_time", "pDrift"),
+                ("precursor_drift_lower_offset", "pLo"),
+                ("precursor_drift_upper_offset", "pHi")),
+            "DIA_IsolationWindow_MzCoverage": (
+                ("mobility_mode", "mode"), ("drift_time_unit", "unit"), ("faims_cv", "CV")),
+            "DIA_IsolationWindow_MzIMCoverage": (
+                ("mobility_mode", "mode"), ("drift_time_unit", "unit"), ("faims_cv", "CV")),
+        }.get(name)
+        if identity_columns:
+            size = max((len(vals) for vals in value.values() if isinstance(vals, (list, tuple))), default=0)
+            labels = [";".join(f"{label}={value[column][i]}"
+                      for column, label in identity_columns
+                      if column in value and i < len(value[column]) and value[column][i] is not None)
+                      for i in range(size)]
+        else:
+            for col, vals in value.items():
+                if isinstance(vals, (list, tuple)) and vals and all(isinstance(v, str) for v in vals):
+                    labels = list(vals)
+                    break
         for col, vals in value.items():
-            if isinstance(vals, (list, tuple)) and vals and all(isinstance(v, str) for v in vals):
-                labels = list(vals)
-                break
-        for col, vals in value.items():
+            if identity_columns and col in {column for column, _ in identity_columns}:
+                continue
             if not isinstance(vals, (list, tuple)):
                 continue
             if vals and all(isinstance(v, str) for v in vals):

@@ -6,6 +6,8 @@ Identification-free quality control for DDA and DIA mass spectrometry data using
 
 - **ID-free metrics**: Calculate QC metrics without peptide or protein identifications.
 - **DDA and DIA metrics**: Shared acquisition and signal statistics, with separate precursor metrics for DDA and isolation-window metrics for DIA.
+- **Acquisition diagnostics**: Recorded scan/frame metadata, ion-filling distributions, and DIA revisit/coverage statistics.
+- **Provenance**: Instrument, sample, source-file, method-file and processing metadata exposed by the reader.
 - **mzQC output**: PSI-MS accessions where applicable, with custom rawQC terms for additional metrics.
 - **Visualizations**: Optional heatmaps for comparing multiple runs.
 - **Demo mode**: Built-in example mzML data.
@@ -125,7 +127,7 @@ metrics = compute_qc_metrics(experiment, acquisition_mode="dia")
 
 ## Output Files
 
-- **mzQC JSON**: Run and instrument metadata, the selected acquisition mode, input-format metadata, and QC metrics. DIA-specific metrics use custom rawQC terms.
+- **mzQC JSON**: Run and instrument metadata, the selected acquisition mode, input-format metadata, and QC metrics. Additional acquisition and DIA metrics use custom rawQC terms. `Provenance_*` fields are stored in the input file's `fileProperties`.
 - **TSV table**: Metrics for all runs, saved next to the mzQC file.
 - **Optional PNG heatmap**: Numeric metrics normalized across runs, with the original values shown as annotations.
 
@@ -137,6 +139,29 @@ metrics = compute_qc_metrics(experiment, acquisition_mode="dia")
 - TIC statistics, base-peak intensities, signal variability, and loaded empty-scan counts.
 - Peak-density quantiles, RT-over-MS quantiles, and TIC quartile statistics.
 - FAIMS compensation voltages, chromatogram statistics, polarity, peak types, and instrument information.
+
+### Recorded Scan/Frame Metadata and Ion Filling
+
+| Field/table | Contents |
+| --- | --- |
+| `Acquisition_ScanMetadata` | One row per loaded spectrum: native ID, frame ID where recorded, RT in seconds, MS level, isolation/mobility/FAIMS selection, actual/maximum injection time in ms, AGC target with its recorded unit, collision/activation energy in eV, normalized collision energy in percent, and reported resolving power. Missing/invalid/ambiguous values have explicit status columns. |
+| `Acquisition_MetadataSources` | Source object, exact key, raw value/unit, and normalization status for supported scan fields. |
+| `Acquisition_BrukerFrameMetadata` | Original TDF `Frames` columns, including accumulation/ramp timing, peak/scan counts, intensity totals and calibration identifiers when present. One row per acquired frame, with the number of loaded spectra mapped to it when unambiguous. |
+| `Acquisition_BrukerFrameSummary` | Acquired/loaded/reader-omitted frame counts, frame RT interval median/CV, and non-increasing RT or nonconsecutive ID transitions. ID gaps alone do not establish missing acquisitions. |
+| `IonInjectionTime_Summary` | Injection-time minimum, quartiles, median, 95th percentile and maximum, grouped by MS level, FAIMS voltage and full DIA isolation-window identity. |
+| `IonInjectionTime_RTSummary` | The same summaries in 60-second half-open RT bins, aligned to RT zero. |
+
+Injection-time summaries count spectra with a valid actual time, a positive known maximum, and both values. The fraction at maximum uses only paired values and a relative tolerance of `1e-6` or absolute tolerance of `1e-6 ms`; above-maximum values are counted separately. Multiple combined acquisition entries have no unique spectrum injection time and are excluded from these distributions. AGC percentages are kept distinct from absolute targets; reported resolving power is not a measurement of peak resolution.
+
+For mzML, an additional streaming pass preserves parameter units that the Python MetaInfo interface drops. Explicit time units are converted to ms. Missing or unsupported units prevent normalization, except when the exact parameter label states the unit (for example `Max. Ion Time (ms)`). Direct `MSExperiment` callers can provide companion unit metadata; untracked standard OpenMS injection-time keys use the canonical ms convention. Native reader coverage varies: the pinned Thermo reader exposes injection time and FAIMS metadata but does not expose every trailer field, so maximum injection time and AGC targets may remain unavailable.
+
+Bruker frame accumulation time is distinct from Thermo injection time. DDA spectra with `precursor=` native IDs can combine multiple frames: their frame token identifies only the first contributing frame, so single-frame timing and frame-omission counts are not inferred for those aggregates. Detailed scan/frame/source records and RT-bin tables remain in mzQC/TSV and are excluded from the summary heatmap.
+
+### Method and Instrument Provenance
+
+`Provenance_Run`, `Provenance_Instrument`, `Provenance_Sample`, `Provenance_SourceFiles`, `Provenance_Processing` and `Provenance_RecordedMetadata` preserve reader-provided values and their originating objects. These include acquisition datetime, instrument/vendor/serial metadata, software versions, sample identity/vial, explicitly recorded method filenames, source-file checksums and processing actions. Arbitrary run-level metadata and Bruker `GlobalMetadata` are retained; native frame payloads are kept in the separate frame table.
+
+Sample volume and injection volume remain separate. Injection volume is normalized only when its unit is known; OpenMS numeric sample defaults and conflicting serial metadata become `null`. Recorded checksums are not recomputed. These fields describe provenance and are written to mzQC input-file metadata, while remaining available under `Provenance_*` in the in-memory result dictionary.
 
 ### DDA Metrics
 
@@ -153,10 +178,15 @@ metrics = compute_qc_metrics(experiment, acquisition_mode="dia")
 - MS2 fragment TIC area, summing spectra at identical retention times before integration so simultaneous diaPASEF windows do not introduce an ordering artifact. At least two distinct valid retention times are required.
 - MS1-bounded survey-cycle counts, duration median and CV, and MS2/window counts per interval.
 - For native Bruker DIA, acquisition-metadata spectrum counts and reader-omission counts, when available.
+- Per-window revisit interval minimum/median/maximum/CV, equal/decreasing/nonfinite RT transition counts, and potential long intervals greater than 1.5 times the median when at least three positive intervals are available. No missing acquisitions are inferred from that threshold.
+- m/z interval union, gap and overlap widths within each observed envelope, separated by mobility unit and FAIMS voltage.
+- m/z–IM rectangle union, uncovered area and overlap area when valid mobility bounds and a known unit are available. Areas have units of m/z times the reported mobility unit; FAIMS voltages are not treated as mobility intervals.
 
 Window bounds include both isolation offsets. Windows with different mobility metadata remain separate. Spectra with multiple precursors are reported as ambiguous and excluded from the window table, avoiding duplicate assignment of fragment signal. Fragment TIC is not normalized by window width. DIA output excludes the DDA charge and selected-precursor metrics, including the precursor-intensity TIC fallback.
 
 Cycle summaries use acquisition-order intervals between consecutive MS1 spectra with valid increasing retention times and enclosed MS2 spectra. Leading and trailing unbounded MS2 spectra are excluded from cycle summaries but remain eligible for window statistics. These intervals do not establish completeness of a DIA cycle or a FAIMS supercycle. Without usable boundaries, duration and per-cycle summaries are unavailable. The isolation m/z envelope likewise does not imply gap-free coverage. Unavailable values are written as JSON `null`.
+
+Coverage describes distinct loaded windows over the whole run, not per-cycle completeness or coverage of a predefined target region. The bounding envelope can include intentionally unmeasured regions, especially for diaPASEF; uncovered area is descriptive and is not a run-failure criterion. Invalid or unknown mobility bounds are excluded from 2D geometry and counted. Revisit table `window_index` refers to the corresponding row of `DIA_IsolationWindow_Summary`.
 
 See the metric descriptions in the source for the exact definitions and accessions.
 
@@ -169,7 +199,7 @@ uv sync --locked
 uv run pytest
 ```
 
-Acquisition-specific code is separated into `src/rawQC/dda.py` and `src/rawQC/dia.py`. `input.py` handles readers and acquisition-mode selection; `calculate_metrics.py` contains shared metrics, orchestration, output, and the CLI. Small shared helpers live in `spectrum_utils.py`. Existing DDA function imports from `rawQC.calculate_metrics` remain available.
+Acquisition-specific code is separated into `src/rawQC/dda.py` and `src/rawQC/dia.py`. `acquisition.py` extracts scan/frame metadata and ion-filling summaries; `provenance.py` extracts descriptive run metadata. `input.py` handles readers and acquisition-mode selection, with supplemental TDF metadata and mzML unit preservation in `reader_metadata.py`. `calculate_metrics.py` contains shared metrics, orchestration, output, and the CLI. Small shared helpers live in `spectrum_utils.py`. Existing DDA function imports from `rawQC.calculate_metrics` remain available.
 
 ## License
 

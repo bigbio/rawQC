@@ -3,6 +3,7 @@
 from pathlib import Path
 from contextlib import closing
 import sqlite3
+from .reader_metadata import attach_bruker_metadata, attach_mzml_units
 
 import pyopenms as oms
 
@@ -66,6 +67,7 @@ def load_experiment(filename):
         is_dia = _bruker_is_dia(path)
         reader = reader_type()
         exp = reader.load(str(path))
+        attach_bruker_metadata(path, exp)
         if is_dia:
             # The loader omits empty frames/windows. Retain the acquisition
             # metadata counts so QC can report these reader omissions separately.
@@ -79,6 +81,7 @@ def load_experiment(filename):
         exp = oms.MSExperiment()
         if suffix == ".mzml":
             oms.MzMLFile().load(str(path), exp)
+            attach_mzml_units(path, exp)
         else:
             # RAW is recognized even in builds without Thermo support, so neither
             # FileHandler.isSupported nor the FileTypes enum is a feature check.
